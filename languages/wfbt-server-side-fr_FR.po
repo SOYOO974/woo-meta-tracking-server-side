@@ -1,0 +1,171 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Woo FB Tracking Server-Side 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-23 20:00+0000\n"
+"PO-Revision-Date: 2026-03-23 20:00+0000\n"
+"Last-Translator: SOYOO\n"
+"Language-Team: French <fr@example.com>\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Woo FB Tracking Server-Side requires WooCommerce to be installed and active."
+msgstr "Woo FB Tracking Server-Side nécessite que WooCommerce soit installé et activé."
+
+msgid "Settings"
+msgstr "Réglages"
+
+msgid "Meta CAPI Server-Side"
+msgstr "Meta CAPI Serveur"
+
+msgid "Meta CAPI"
+msgstr "Meta CAPI"
+
+msgid "Woo FB Tracking Server-Side"
+msgstr "Woo FB Tracking Server-Side"
+
+msgid "Configuration"
+msgstr "Configuration"
+
+msgid "Tutorial"
+msgstr "Tutoriel"
+
+msgid "Diagnostics"
+msgstr "Diagnostics"
+
+msgid "Meta Pixel ID"
+msgstr "ID du Pixel Meta"
+
+msgid "Meta Conversions API Access Token"
+msgstr "Token d'accès API Conversions Meta"
+
+msgid "Test Event Code (Optional)"
+msgstr "Code d'événement de test (Optionnel)"
+
+msgid "Enter the Test Event Code from your Meta Events Manager to test events."
+msgstr "Saisissez le code d'événement de test depuis votre gestionnaire d'événements Meta pour tester les événements."
+
+msgid "Enable Email Alerts"
+msgstr "Activer les alertes par email"
+
+msgid "Send an email if an API request fails."
+msgstr "Envoyer un e-mail si une requête API échoue."
+
+msgid "Alert Email Address"
+msgstr "Adresse e-mail d'alerte"
+
+msgid "How to configure this plugin"
+msgstr "Comment configurer cette extension"
+
+msgid "Follow these exact steps in the Meta Events Manager to set up the Conversions API:"
+msgstr "Suivez ces étapes précises dans le Gestionnaire d'Événements Meta pour configurer l'API Conversions :"
+
+msgid "Go to your Meta Events Manager and select your Pixel."
+msgstr "Allez dans votre gestionnaire d'événements Meta et sélectionnez votre Pixel."
+
+msgid "Click on \"Settings\" and copy your \"Pixel ID\" into the Configuration tab."
+msgstr "Cliquez sur « Paramètres » et copiez votre « ID de Pixel » dans l'onglet Configuration."
+
+msgid "Under the \"Conversions API\" section, click on \"Set up manually\" (Configurer manuellement)."
+msgstr "Dans la section « API Conversions », cliquez sur « Configurer manuellement »."
+
+msgid "Select the \"Purchase\" (Acheter) event and click Continue."
+msgstr "Sélectionnez l'événement « Acheter » (Purchase) et cliquez sur Continuer."
+
+msgid "Select Event Detail Parameters (Paramètres des détails des événements):"
+msgstr "Sélectionnez les Paramètres des détails des événements :"
+
+msgid "Event Time (Heure de l'événement)"
+msgstr "Heure de l'événement"
+
+msgid "Event Name (Nom de l'événement)"
+msgstr "Nom de l'événement"
+
+msgid "Event Source URL (URL de la source de l'événement)"
+msgstr "URL de la source de l'événement"
+
+msgid "Action Source (Origine de l'action)"
+msgstr "Origine de l'action"
+
+msgid "Currency (Devise)"
+msgstr "Devise"
+
+msgid "Value (Valeur)"
+msgstr "Valeur"
+
+msgid "Select Customer Information Parameters (Paramètres des informations client):"
+msgstr "Sélectionnez les Paramètres des informations client :"
+
+msgid "Client IP Address (Adresse IP client)"
+msgstr "Adresse IP client"
+
+msgid "Client User Agent (Agent utilisateur client)"
+msgstr "Agent utilisateur client"
+
+msgid "Email (E-mail)"
+msgstr "E-mail"
+
+msgid "Phone (Téléphone)"
+msgstr "Téléphone"
+
+msgid "First Name (Prénom)"
+msgstr "Prénom"
+
+msgid "Last Name (Nom de famille)"
+msgstr "Nom de famille"
+
+msgid "City (Ville)"
+msgstr "Ville"
+
+msgid "State (État)"
+msgstr "État"
+
+msgid "Zip/Postal Code (Code postal)"
+msgstr "Code postal"
+
+msgid "Country (Pays)"
+msgstr "Pays"
+
+msgid "Finish the setup, then click \"Generate access token\" (Générer un token d'accès)."
+msgstr "Terminez la configuration, puis cliquez sur « Générer un token d'accès »."
+
+msgid "Copy the Token and paste it into the Configuration tab."
+msgstr "Copiez ce Token et collez-le dans l'onglet Configuration."
+
+msgid "Save the settings, and test the connection in the Diagnostics tab using your Test Event Code!"
+msgstr "Enregistrez les réglages, puis testez la connexion dans l'onglet Diagnostics avec votre code de test !"
+
+msgid "Test Connection"
+msgstr "Tester la connexion"
+
+msgid "Click the button below to send a dummy Purchase event using your Test Event Code."
+msgstr "Cliquez sur le bouton ci-dessous pour envoyer un événement d'Achat factice en utilisant votre code d'événement de test."
+
+msgid "Test API Connection"
+msgstr "Tester la connexion API"
+
+msgid "Last 20 WooCommerce Orders"
+msgstr "Les 20 dernières commandes WooCommerce"
+
+msgid "Order ID"
+msgstr "ID de commande"
+
+msgid "Date"
+msgstr "Date"
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Meta CAPI Status"
+msgstr "Statut Meta CAPI"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "No orders found."
+msgstr "Aucune commande trouvée."
+
+msgid "Resend to Meta"
+msgstr "Renvoyer à Meta"

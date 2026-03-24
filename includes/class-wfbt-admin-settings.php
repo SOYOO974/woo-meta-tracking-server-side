@@ -171,15 +171,41 @@ class Admin_Settings {
 		?>
 		<div class="card" style="max-width: 800px; padding: 20px;">
 			<h3><?php esc_html_e( 'How to configure this plugin', 'wfbt-server-side' ); ?></h3>
+			<p><?php esc_html_e( 'Follow these exact steps in the Meta Events Manager to set up the Conversions API:', 'wfbt-server-side' ); ?></p>
 			<ol>
-				<li>Go to the <a href="https://business.facebook.com/events_manager2" target="_blank">Meta Events Manager</a>.</li>
-				<li>Select your Data Source (Pixel).</li>
-				<li>Click on the <strong>Settings</strong> tab.</li>
-				<li>Under <strong>Dataset ID</strong>, copy your <strong>Pixel ID</strong> and paste it into the Configuration tab.</li>
-				<li>Scroll down to the <strong>Conversions API</strong> section.</li>
-				<li>Click <strong>Generate access token</strong>. Copy this token and paste it into the Configuration tab.</li>
-				<li>If you want to test the connection, go to the <strong>Test events</strong> tab in Meta Events Manager, copy the <strong>Test Event Code</strong>, and paste it into the Configuration tab here.</li>
-				<li>Save your changes, then visit the <strong>Diagnostics</strong> tab to test the connection!</li>
+				<li><?php esc_html_e( 'Go to your Meta Events Manager and select your Pixel.', 'wfbt-server-side' ); ?></li>
+				<li><?php esc_html_e( 'Click on "Settings" and copy your "Pixel ID" into the Configuration tab.', 'wfbt-server-side' ); ?></li>
+				<li><?php esc_html_e( 'Under the "Conversions API" section, click on "Set up manually" (Configurer manuellement).', 'wfbt-server-side' ); ?></li>
+				<li><?php esc_html_e( 'Select the "Purchase" (Acheter) event and click Continue.', 'wfbt-server-side' ); ?></li>
+				<li>
+					<strong><?php esc_html_e( 'Select Event Detail Parameters (Paramètres des détails des événements):', 'wfbt-server-side' ); ?></strong>
+					<ul>
+						<li><?php esc_html_e( 'Event Time (Heure de l\'événement)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Event Name (Nom de l\'événement)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Event Source URL (URL de la source de l\'événement)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Action Source (Origine de l\'action)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Currency (Devise)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Value (Valeur)', 'wfbt-server-side' ); ?></li>
+					</ul>
+				</li>
+				<li>
+					<strong><?php esc_html_e( 'Select Customer Information Parameters (Paramètres des informations client):', 'wfbt-server-side' ); ?></strong>
+					<ul>
+						<li><?php esc_html_e( 'Client IP Address (Adresse IP client)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Client User Agent (Agent utilisateur client)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Email (E-mail)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Phone (Téléphone)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'First Name (Prénom)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Last Name (Nom de famille)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'City (Ville)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'State (État)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Zip/Postal Code (Code postal)', 'wfbt-server-side' ); ?></li>
+						<li><?php esc_html_e( 'Country (Pays)', 'wfbt-server-side' ); ?></li>
+					</ul>
+				</li>
+				<li><?php esc_html_e( 'Finish the setup, then click "Generate access token" (Générer un token d\'accès).', 'wfbt-server-side' ); ?></li>
+				<li><?php esc_html_e( 'Copy the Token and paste it into the Configuration tab.', 'wfbt-server-side' ); ?></li>
+				<li><?php esc_html_e( 'Save the settings, and test the connection in the Diagnostics tab using your Test Event Code!', 'wfbt-server-side' ); ?></li>
 			</ol>
 		</div>
 		<?php

@@ -96,7 +96,7 @@ class Meta_Api {
 		$user_data   = $this->extract_user_data( $order );
 		$custom_data = $this->extract_custom_data( $order );
 
-		$event_time = $order->get_date_created() ? $order->get_date_created()->getOffsetTimestamp() : time();
+		$event_time = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
 
 		$payload = array(
 			'event_name'    => 'Purchase',

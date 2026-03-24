@@ -4,8 +4,8 @@
  * Plugin URI:  https://github.com/
  * Description: WooCommerce plugin to send "Purchase" events to the Meta Conversions API (CAPI) server-side asynchronously.
  * Version:     1.0.0
- * Author:      Developer
- * Author URI:  https://github.com/
+ * Author:      SOYOO
+ * Author URI:  https://soyoo.re
  * Text Domain: wfbt-server-side
  * Domain Path: /languages
  *
@@ -26,6 +26,8 @@ define( 'WFBT_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
  * Initialize the plugin when WooCommerce and its Action Scheduler are loaded.
  */
 function wfbt_init_plugin() {
+	// Load plugin text domain for translations.
+	load_plugin_textdomain( 'wfbt-server-side', false, dirname( WFBT_PLUGIN_BASENAME ) . '/languages' );
 	// Check if WooCommerce is active.
 	if ( ! class_exists( 'WooCommerce' ) ) {
 		add_action( 'admin_notices', 'wfbt_missing_wc_notice' );
@@ -43,6 +45,16 @@ function wfbt_init_plugin() {
 	\WFBT\Core::instance();
 }
 add_action( 'plugins_loaded', 'wfbt_init_plugin', 11 );
+
+/**
+ * Add Settings link to the plugin list page.
+ */
+function wfbt_add_settings_link( $links ) {
+	$settings_link = '<a href="admin.php?page=wfbt-settings">' . esc_html__( 'Settings', 'wfbt-server-side' ) . '</a>';
+	array_unshift( $links, $settings_link );
+	return $links;
+}
+add_filter( 'plugin_action_links_' . WFBT_PLUGIN_BASENAME, 'wfbt_add_settings_link' );
 
 /**
  * Admin notice if WooCommerce is missing.
