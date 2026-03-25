@@ -97,6 +97,12 @@ class Meta_Api {
 		$custom_data = $this->extract_custom_data( $order );
 
 		$event_time = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
+		
+		// Meta CAPI requires the event_time to be within the last 7 days.
+		$seven_days_ago = time() - ( 7 * 86400 ) + 3600; // 7 days ago plus 1 hour buffer
+		if ( $event_time < $seven_days_ago ) {
+			$event_time = $seven_days_ago;
+		}
 
 		$payload = array(
 			'event_name'    => 'Purchase',
