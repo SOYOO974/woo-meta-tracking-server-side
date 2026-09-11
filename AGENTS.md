@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.1)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.2)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -64,6 +64,7 @@ woo-fb-tracking-server-side/
 - **[includes/class-wfbt-background-processor.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-background-processor.php)** :
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
+  - Enregistrement robuste du menu d'administration à la priorité 50 sur `admin_menu` avec support universel des droits administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`). Repli automatique sous Réglages (`options-general.php`) si `manage_woocommerce` est indisponible.
   - Onglet Configuration : formulaire avec bascules Pixel front, RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics : test de connexion CAPI direct en AJAX (v21.0) et tableau d'audit des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
   - Onglet Tutoriel & Guide de configuration : 5 étapes ultra-détaillées sans devinette avec liens directs vers le Gestionnaire d'événements Meta, les Utilisateurs système et Meta Pixel Helper.

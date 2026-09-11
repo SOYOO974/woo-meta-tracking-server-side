@@ -16,7 +16,7 @@ class Admin_Settings {
 	 * Initialize Admin Hooks.
 	 */
 	public static function init() {
-		add_action( 'admin_menu', array( __CLASS__, 'add_settings_page' ) );
+		add_action( 'admin_menu', array( __CLASS__, 'add_settings_page' ), 50 );
 		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_scripts' ) );
 
@@ -26,17 +26,39 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Add Settings Page to WooCommerce menu.
+	 * Get appropriate capability for settings page.
+	 * Supports both store managers (manage_woocommerce) and site administrators (manage_options).
+	 *
+	 * @return string
+	 */
+	public static function get_capability() {
+		return current_user_can( 'manage_woocommerce' ) ? 'manage_woocommerce' : 'manage_options';
+	}
+
+	/**
+	 * Add Settings Page to WooCommerce menu (or Settings menu as fallback).
 	 */
 	public static function add_settings_page() {
-		add_submenu_page(
-			'woocommerce',
-			__( 'Meta Hybrid Tracking (Pixel + CAPI)', 'wfbt-server-side' ),
-			__( 'Meta Tracking', 'wfbt-server-side' ),
-			'manage_woocommerce',
-			'wfbt-settings',
-			array( __CLASS__, 'render_settings_page' )
-		);
+		$capability = self::get_capability();
+
+		if ( current_user_can( 'manage_woocommerce' ) ) {
+			add_submenu_page(
+				'woocommerce',
+				__( 'Meta Hybrid Tracking (Pixel + CAPI)', 'wfbt-server-side' ),
+				__( 'Meta Tracking', 'wfbt-server-side' ),
+				$capability,
+				'wfbt-settings',
+				array( __CLASS__, 'render_settings_page' )
+			);
+		} else {
+			add_options_page(
+				__( 'Meta Hybrid Tracking (Pixel + CAPI)', 'wfbt-server-side' ),
+				__( 'Meta Tracking', 'wfbt-server-side' ),
+				'manage_options',
+				'wfbt-settings',
+				array( __CLASS__, 'render_settings_page' )
+			);
+		}
 	}
 
 	/**
@@ -61,7 +83,7 @@ class Admin_Settings {
 	 * @param string $hook The current admin page.
 	 */
 	public static function enqueue_scripts( $hook ) {
-		if ( 'woocommerce_page_wfbt-settings' !== $hook ) {
+		if ( 'woocommerce_page_wfbt-settings' !== $hook && 'settings_page_wfbt-settings' !== $hook ) {
 			return;
 		}
 
@@ -617,7 +639,7 @@ class Admin_Settings {
 	public static function ajax_test_connection() {
 		check_ajax_referer( 'wfbt_admin_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( __( 'Permission denied.', 'wfbt-server-side' ) );
 		}
 
@@ -687,7 +709,7 @@ class Admin_Settings {
 	public static function ajax_resend_order() {
 		check_ajax_referer( 'wfbt_admin_nonce', 'nonce' );
 
-		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+		if ( ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( __( 'Permission denied.', 'wfbt-server-side' ) );
 		}
 

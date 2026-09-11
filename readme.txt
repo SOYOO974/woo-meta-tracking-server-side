@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,10 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.2 =
+* **Correctif Autorisations Admin (Settings)** : Résolution de l'erreur « Désolé, vous n’avez pas l’autorisation d’accéder à cette page ». Prise en charge dynamique des rôles administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`), avec repli automatique sous Réglages si `manage_woocommerce` est indisponible.
+* **Priorité du Menu Admin** : Enregistrement différé à la priorité 50 sur le hook `admin_menu` pour garantir l'initialisation complète de l'arborescence WooCommerce.
 
 = 2.0.1 =
 * **Tutoriel & Guide Pas à Pas** : Refonte intégrale du 3ème onglet avec 5 étapes numérotées, liens directs cliquables vers le Gestionnaire d'événements Meta, Paramètres d'entreprise et Pixel Helper.
