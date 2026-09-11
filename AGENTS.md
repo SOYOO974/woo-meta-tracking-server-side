@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.2)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.3)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -67,7 +67,7 @@ woo-fb-tracking-server-side/
   - Enregistrement robuste du menu d'administration à la priorité 50 sur `admin_menu` avec support universel des droits administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`). Repli automatique sous Réglages (`options-general.php`) si `manage_woocommerce` est indisponible.
   - Onglet Configuration : formulaire avec bascules Pixel front, RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics : test de connexion CAPI direct en AJAX (v21.0) et tableau d'audit des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
-  - Onglet Tutoriel & Guide de configuration : 5 étapes ultra-détaillées sans devinette avec liens directs vers le Gestionnaire d'événements Meta, les Utilisateurs système et Meta Pixel Helper.
+  - Onglet Tutoriel & Guide de configuration : 8 étapes structurées sous forme d'accordéon repliable (fermé par défaut) avec boutons « Tout déplier / Tout replier ». Détaille exhaustivement le paramétrage Meta (choix exclusif de l'événement Acheter, matrice exacte des cases à cocher client/événement, génération du token Dataset Quality API, test en direct et Pixel Helper).
 - **[public/class-wfbt-public.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/public/class-wfbt-public.php)** :
   - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (AJAX WooCommerce `added_to_cart`), `InitiateCheckout` et `Purchase`.
   - Intégration Concord Cookie Banner (fonction JS helper `wfbtHasMarketingConsent()`, écouteurs d'événements et polling léger).

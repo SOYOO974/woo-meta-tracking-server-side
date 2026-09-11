@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,12 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.3 =
+* **Guide Déroulant en Accordéon & Clarté Optimale** : Refonte de l'onglet Tutoriel en accordéon avec volets fermés par défaut et boutons « Tout déplier / Tout replier ».
+* **Détail Exhaustif du Tunnel Meta CAPI** : Explication pas-à-pas de l'assistant Meta avec choix exclusif de l'événement « Acheter » (Purchase) et tableau complet des cases à cocher (Event ID dédupliqué, cookies fbp/fbc, IP/UA, E.164 Réunion/France).
+* **Génération Token CAPI** : Instructions détaillées pour le token Dataset Quality API et alternatives Utilisateur système.
+* **Internationalisation (i18n)** : Fichiers .pot, .po et binaire .mo français 100% à jour.
 
 = 2.0.2 =
 * **Correctif Autorisations Admin (Settings)** : Résolution de l'erreur « Désolé, vous n’avez pas l’autorisation d’accéder à cette page ». Prise en charge dynamique des rôles administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`), avec repli automatique sous Réglages si `manage_woocommerce` est indisponible.
