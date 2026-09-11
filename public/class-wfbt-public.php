@@ -23,6 +23,7 @@ class Public_Handler {
 		// Enqueue / print Pixel scripts in <head> and footer.
 		add_action( 'wp_head', array( __CLASS__, 'render_head_pixel' ), 1 );
 		add_action( 'wp_footer', array( __CLASS__, 'render_footer_scripts' ), 99 );
+		add_action( 'wp_footer', array( __CLASS__, 'maybe_render_debug_bar' ), 100 );
 
 		// Capture cookies on checkout submission.
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'capture_checkout_order_meta' ), 10, 1 );
@@ -103,6 +104,31 @@ class Public_Handler {
 				t.src=v;s=b.getElementsByTagName(e)[0];
 				s.parentNode.insertBefore(t,s)}(window, document,'script',
 				'https://connect.facebook.net/en_US/fbevents.js');
+
+				// Instrument fbq to record events for live diagnostics and debug bar
+				window.wfbtEventsLog = window.wfbtEventsLog || [];
+				var _orig_fbq = window.fbq;
+				window.fbq = function() {
+					var args = Array.prototype.slice.call(arguments);
+					if (args.length) {
+						window.wfbtEventsLog.push({
+							time: new Date().toLocaleTimeString(),
+							action: args[0],
+							name: args[1],
+							params: args[2] || null,
+							options: args[3] || null
+						});
+						if (typeof window.wfbtUpdateDebugBar === 'function') {
+							window.wfbtUpdateDebugBar();
+						}
+					}
+					return _orig_fbq.apply(this, arguments);
+				};
+				for (var prop in _orig_fbq) {
+					if (_orig_fbq.hasOwnProperty(prop)) {
+						window.fbq[prop] = _orig_fbq[prop];
+					}
+				}
 
 				fbq('init', wfbt_pixel_id);
 				fbq('track', 'PageView');
@@ -510,5 +536,243 @@ class Public_Handler {
 		}
 
 		return 'unknown';
+	}
+
+	/**
+	 * Render floating Front-End Debug Bar for Store Managers and Administrators.
+	 */
+	public static function maybe_render_debug_bar() {
+		$enable = get_option( 'wfbt_enable_debug_bar', 'yes' );
+		if ( 'yes' !== $enable ) {
+			return;
+		}
+
+		$is_admin  = current_user_can( 'manage_woocommerce' ) || current_user_can( 'manage_options' );
+		$has_param = isset( $_GET['wfbt_debug'] ) && '1' === (string) $_GET['wfbt_debug'];
+
+		if ( ! $is_admin && ! $has_param ) {
+			return;
+		}
+
+		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
+		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$consent_mode = get_option( 'wfbt_consent_action', 'anonymize' );
+		?>
+		<!-- WFBT Front-End Live Debug Bar -->
+		<div id="wfbt-debug-container" style="position: fixed; bottom: 18px; right: 18px; z-index: 9999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px;">
+			<!-- Floating Pill / Toggle Button -->
+			<div id="wfbt-debug-pill" style="background: #1877f2; color: #fff; padding: 8px 14px; border-radius: 30px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; transition: transform 0.15s ease, background 0.15s ease;">
+				<span style="font-size: 15px;">🔵</span>
+				<span>Meta Tracking</span>
+				<span id="wfbt-debug-count-badge" style="background: #fff; color: #1877f2; border-radius: 12px; padding: 1px 7px; font-size: 11px; font-weight: 700;">0</span>
+				<span id="wfbt-debug-consent-pill-badge" style="background: rgba(255,255,255,0.2); border-radius: 10px; padding: 1px 6px; font-size: 10px;">--</span>
+			</div>
+
+			<!-- Expanded Live Inspector Modal -->
+			<div id="wfbt-debug-card" style="display: none; width: 380px; max-width: 90vw; background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); border: 1px solid #ccd0d4; overflow: hidden; margin-top: 10px; text-align: left; color: #1d2327;">
+				<!-- Header -->
+				<div style="background: #1877f2; color: #fff; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+					<div>
+						<div style="font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+							<span>Meta Tracking Inspector</span>
+							<span style="font-size: 10px; background: rgba(255,255,255,0.25); padding: 2px 6px; border-radius: 4px;">Admin</span>
+						</div>
+						<div style="font-size: 11px; opacity: 0.9; margin-top: 2px;">
+							Pixel: <code><?php echo esc_html( $pixel_id ?: __( 'Not configured', 'wfbt-server-side' ) ); ?></code>
+						</div>
+					</div>
+					<button type="button" id="wfbt-debug-close" style="background: transparent; border: none; color: #fff; font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;">✕</button>
+				</div>
+
+				<div style="padding: 14px 16px; max-height: 420px; overflow-y: auto;">
+					<!-- 1. Consent & Cookies -->
+					<div style="margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f1;">
+						<div style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: #646970; margin-bottom: 8px;">
+							<?php esc_html_e( 'GDPR Consent & Cookies', 'wfbt-server-side' ); ?>
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+							<span><?php esc_html_e( 'Concord Consent:', 'wfbt-server-side' ); ?></span>
+							<span id="wfbt-debug-consent-val" style="font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #f0f0f1; color: #646970;">Checking...</span>
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px;">
+							<span><code>_fbp</code> (Browser ID):</span>
+							<span id="wfbt-debug-fbp-val" style="font-family: monospace; font-size: 11px; color: #007cba;">--</span>
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px;">
+							<span><code>_fbc</code> (Click ID):</span>
+							<span id="wfbt-debug-fbc-val" style="font-family: monospace; font-size: 11px; color: #007cba;">--</span>
+						</div>
+						<div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+							<span><code>?fbclid=</code>:</span>
+							<span id="wfbt-debug-fbclid-val" style="font-family: monospace; font-size: 11px; color: #646970;">--</span>
+						</div>
+					</div>
+
+					<!-- 2. Live fbq Event Stream -->
+					<div style="margin-bottom: 14px;">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+							<span style="font-weight: 700; font-size: 12px; text-transform: uppercase; color: #646970;">
+								<?php esc_html_e( 'Live fbq Events on this page', 'wfbt-server-side' ); ?>
+							</span>
+							<span id="wfbt-debug-pixel-health" style="font-size: 11px; color: #008a00; font-weight: 600;">● Pixel Active</span>
+						</div>
+						<div id="wfbt-debug-events-list" style="background: #f6f7f7; border: 1px solid #e2e4e7; border-radius: 6px; padding: 8px; max-height: 180px; overflow-y: auto; font-family: monospace; font-size: 11.5px;">
+							<div style="color: #646970; text-align: center; padding: 10px;"><?php esc_html_e( 'Waiting for events...', 'wfbt-server-side' ); ?></div>
+						</div>
+					</div>
+
+					<!-- 3. Quick Actions -->
+					<div style="background: #f0f6fc; padding: 10px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.5;">
+						<div style="font-weight: 600; margin-bottom: 6px;"><?php esc_html_e( 'Diagnostic Quick Actions:', 'wfbt-server-side' ); ?></div>
+						<div style="display: flex; gap: 6px; flex-wrap: wrap;">
+							<button type="button" id="wfbt-debug-btn-sim-click" style="background: #fff; border: 1px solid #ccd0d4; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+								<?php esc_html_e( 'Simulate Meta Click (?fbclid=)', 'wfbt-server-side' ); ?>
+							</button>
+							<button type="button" id="wfbt-debug-btn-clear" style="background: #fff; border: 1px solid #ccd0d4; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+								<?php esc_html_e( 'Clear test cookies', 'wfbt-server-side' ); ?>
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script type="text/javascript">
+		(function() {
+			var pill = document.getElementById('wfbt-debug-pill');
+			var card = document.getElementById('wfbt-debug-card');
+			var closeBtn = document.getElementById('wfbt-debug-close');
+			var eventsList = document.getElementById('wfbt-debug-events-list');
+			var countBadge = document.getElementById('wfbt-debug-count-badge');
+			var consentPillBadge = document.getElementById('wfbt-debug-consent-pill-badge');
+			var consentVal = document.getElementById('wfbt-debug-consent-val');
+			var fbpVal = document.getElementById('wfbt-debug-fbp-val');
+			var fbcVal = document.getElementById('wfbt-debug-fbc-val');
+			var fbclidVal = document.getElementById('wfbt-debug-fbclid-val');
+			var healthBadge = document.getElementById('wfbt-debug-pixel-health');
+
+			if (!pill || !card) return;
+
+			function getCookie(name) {
+				var matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+				return matches ? decodeURIComponent(matches[1]) : '';
+			}
+
+			function updateDebugView() {
+				// 1. Consent
+				var hasConsent = (typeof window.wfbtHasMarketingConsent === 'function') ? window.wfbtHasMarketingConsent() : false;
+				if (hasConsent) {
+					consentVal.textContent = 'GRANTED';
+					consentVal.style.background = '#e7f7ed';
+					consentVal.style.color = '#008a00';
+					consentPillBadge.textContent = 'Consent: OK';
+					consentPillBadge.style.background = '#008a00';
+				} else {
+					consentVal.textContent = 'DENIED / WAITING';
+					consentVal.style.background = '#fce8e6';
+					consentVal.style.color = '#d93025';
+					consentPillBadge.textContent = 'No Consent';
+					consentPillBadge.style.background = '#d93025';
+				}
+
+				// 2. Cookies
+				var fbp = getCookie('_fbp');
+				fbpVal.textContent = fbp ? (fbp.substring(0, 18) + '...') : 'None';
+				fbpVal.style.color = fbp ? '#007cba' : '#888';
+
+				var fbc = getCookie('_fbc');
+				fbcVal.textContent = fbc ? (fbc.substring(0, 18) + '...') : 'None';
+				fbcVal.style.color = fbc ? '#007cba' : '#888';
+
+				var urlParams = new URLSearchParams(window.location.search);
+				var fbclid = urlParams.get('fbclid') || getCookie('wfbt_fbclid');
+				fbclidVal.textContent = fbclid ? (fbclid.substring(0, 18) + '...') : 'None';
+
+				// 3. Pixel Health
+				if (typeof window.fbq === 'function') {
+					healthBadge.textContent = '● Pixel Ready';
+					healthBadge.style.color = '#008a00';
+				} else {
+					healthBadge.textContent = '● Pixel Blocked / Off';
+					healthBadge.style.color = '#d93025';
+				}
+
+				// 4. Events
+				var logs = window.wfbtEventsLog || [];
+				countBadge.textContent = logs.length;
+
+				if (logs.length > 0) {
+					var html = '';
+					for (var i = logs.length - 1; i >= 0; i--) {
+						var item = logs[i];
+						var eventTitle = item.name || item.action || 'Event';
+						var isPurchase = (eventTitle === 'Purchase');
+						var eventIdStr = (item.options && item.options.eventID) ? ' [ID: ' + item.options.eventID + ']' : '';
+						
+						html += '<div style="padding: 5px 0; border-bottom: 1px dotted #dcdcde;">';
+						html += '<div style="display: flex; justify-content: space-between;">';
+						html += '<strong style="color: ' + (isPurchase ? '#008a00' : '#1877f2') + ';">' + eventTitle + eventIdStr + '</strong>';
+						html += '<span style="color: #888; font-size: 10px;">' + item.time + '</span>';
+						html += '</div>';
+						if (item.params) {
+							var preview = '';
+							if (item.params.value) preview += 'val: ' + item.params.value + ' ' + (item.params.currency || '') + ' ';
+							if (item.params.content_name) preview += item.params.content_name + ' ';
+							if (item.params.num_items) preview += '(' + item.params.num_items + ' items) ';
+							if (!preview) preview = JSON.stringify(item.params);
+							html += '<div style="font-size: 10px; color: #50575e; word-break: break-all;">' + preview + '</div>';
+						}
+						html += '</div>';
+					}
+					eventsList.innerHTML = html;
+				}
+			}
+
+			window.wfbtUpdateDebugBar = updateDebugView;
+
+			// Toggle open/close
+			pill.addEventListener('click', function() {
+				if (card.style.display === 'none') {
+					card.style.display = 'block';
+					pill.style.display = 'none';
+					updateDebugView();
+				}
+			});
+
+			closeBtn.addEventListener('click', function() {
+				card.style.display = 'none';
+				pill.style.display = 'flex';
+			});
+
+			// Actions
+			var simBtn = document.getElementById('wfbt-debug-btn-sim-click');
+			if (simBtn) {
+				simBtn.addEventListener('click', function() {
+					var url = new URL(window.location.href);
+					url.searchParams.set('fbclid', 'SOYOO_TEST_CLICK_' + Math.floor(Math.random() * 90000 + 10000));
+					url.searchParams.set('wfbt_debug', '1');
+					window.location.href = url.toString();
+				});
+			}
+
+			var clearBtn = document.getElementById('wfbt-debug-btn-clear');
+			if (clearBtn) {
+				clearBtn.addEventListener('click', function() {
+					document.cookie = 'wfbt_fbclid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+					try {
+						localStorage.removeItem('wfbt_fbclid');
+						localStorage.removeItem('wfbt_fbclid_ts');
+					} catch(e) {}
+					alert('Test cookies cleared.');
+					updateDebugView();
+				});
+			}
+
+			// Initial refresh
+			setTimeout(updateDebugView, 800);
+		})();
+		</script>
+		<!-- End WFBT Front-End Live Debug Bar -->
+		<?php
 	}
 }

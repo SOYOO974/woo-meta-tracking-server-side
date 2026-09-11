@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.3
+Stable tag: 2.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,14 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.4 =
+* **Tableau de Bord Exécutif de Diagnostics** : Refonte totale du 2ème onglet « Diagnostics » avec grille d'état pré-vol (identifiants Meta, architecture HPOS/Action Scheduler, RGPD Concord, débogueur).
+* **Barre de Débogage Flottante Front-End** : Inspecteur interactif repliable en bas à droite pour les administrateurs et gestionnaires de boutique (`wfbt_enable_debug_bar` ou `?wfbt_debug=1`). Capture et affiche en direct le flux des événements `fbq` (`PageView`, `ViewContent`, `AddToCart`, `InitiateCheckout`, `Purchase`), le consentement Concord et les cookies publicitaires. Inclut la simulation de clics Meta en 1 clic (`?fbclid=`).
+* **Inspecteur de Cookies Navigateur en Direct** : Détection instantanée côté admin des cookies de session active `concord`, `_fbp` et `_fbc` avec lien de test direct.
+* **Vérification de Santé Meta Graph API (v21.0)** : Interrogation directe de l'API Graph Meta pour contrôler le nom du Dataset, la disponibilité et la date du dernier événement reçu.
+* **KPIs HPOS sur 30 Jours & Histogramme SVG Natif 14 Jours** : Mesure de performance sans impact front-end (taux de succès CAPI, taux de capture `_fbp`, taux d'attribution clics Meta `_fbc`, volume de commandes) et graphique dynamique pur SVG (zéro librairie JS externe).
+* **Internationalisation (i18n)** : Fichiers .pot, .po et binaire .mo français 100% synchronisés.
 
 = 2.0.3 =
 * **Guide Déroulant en Accordéon & Clarté Optimale** : Refonte de l'onglet Tutoriel en accordéon avec volets fermés par défaut et boutons « Tout déplier / Tout replier ».

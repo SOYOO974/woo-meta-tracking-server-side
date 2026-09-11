@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.3)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.4)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -14,7 +14,8 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 4. **Conformité RGPD stricte asservie à Concord Cookie Banner** : Respect absolu du consentement marketing, écoute dynamique des événements d'acceptation en direct (activation à chaud sans rechargement de page), et anonymisation CAPI sécurisée par défaut (`anonymize` : transmission valeur, devise, articles et eventID sans PII, sans _fbp/_fbc, sans IP/UA) ou annulation totale (`block`).
 5. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
 6. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
-7. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
+7. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End** : Grille pré-vol complète, inspecteur de cookies de session active (`concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin en direct sur la boutique.
+8. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
 
@@ -65,11 +66,19 @@ woo-fb-tracking-server-side/
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
   - Enregistrement robuste du menu d'administration à la priorité 50 sur `admin_menu` avec support universel des droits administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`). Repli automatique sous Réglages (`options-general.php`) si `manage_woocommerce` est indisponible.
-  - Onglet Configuration : formulaire avec bascules Pixel front, RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
-  - Onglet Diagnostics : test de connexion CAPI direct en AJAX (v21.0) et tableau d'audit des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
+  - Onglet Configuration : formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
+  - Onglet Diagnostics Exécutif :
+    - Grille pré-vol d'état (Identifiants Meta, Architecture HPOS & Action Scheduler, RGPD Concord, Débogueur front).
+    - Inspecteur de cookies de session active en temps réel (`concord`, `_fbp`, `_fbc`) avec bouton d'actualisation et simulation de clic pub Meta (`?fbclid=`).
+    - Outils d'interrogation Meta Graph API v21.0 : test de santé du Dataset (`GET /{pixel_id}`) et test de connexion CAPI (`POST /{pixel_id}/events`).
+    - KPIs de performance HPOS sur 30 jours (taux de succès CAPI, taux de capture `_fbp`, taux de clics Meta Ads `_fbc`, volume de commandes).
+    - Histogramme d'activité quotidien sur 14 jours généré en pur SVG vectoriel natif (zéro librairie JS externe).
+    - Tableau d'audit HPOS des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
   - Onglet Tutoriel & Guide de configuration : 8 étapes structurées sous forme d'accordéon repliable (fermé par défaut) avec boutons « Tout déplier / Tout replier ». Détaille exhaustivement le paramétrage Meta (choix exclusif de l'événement Acheter, matrice exacte des cases à cocher client/événement, génération du token Dataset Quality API, test en direct et Pixel Helper).
 - **[public/class-wfbt-public.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/public/class-wfbt-public.php)** :
   - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (AJAX WooCommerce `added_to_cart`), `InitiateCheckout` et `Purchase`.
+  - Instrumentation non intrusive du Pixel `window.fbq` pour journaliser tous les appels dans `window.wfbtEventsLog`.
+  - Barre de débogage flottante en direct (`maybe_render_debug_bar`) pour administrateurs et gestionnaires de boutique (`manage_woocommerce`, `manage_options`, ou `?wfbt_debug=1`) : pastille repliable en bas à droite inspectant l'état du Pixel, le consentement Concord, `_fbp`, `_fbc`, `?fbclid=`, le flux temps réel de tous les événements `fbq` avec paramètres et boutons d'actions rapides.
   - Intégration Concord Cookie Banner (fonction JS helper `wfbtHasMarketingConsent()`, écouteurs d'événements et polling léger).
   - Capture de `?fbclid=` en cookie first-party `wfbt_fbclid` (90 jours) + `localStorage`.
   - Injection de champs masqués au checkout pour sauvegarder `_wfbt_fbp`, `_wfbt_fbc` et `_wfbt_consent`.

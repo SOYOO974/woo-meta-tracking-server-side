@@ -23,6 +23,7 @@ class Admin_Settings {
 		// Ajax actions for Diagnostics tab.
 		add_action( 'wp_ajax_wfbt_test_connection', array( __CLASS__, 'ajax_test_connection' ) );
 		add_action( 'wp_ajax_wfbt_resend_order', array( __CLASS__, 'ajax_resend_order' ) );
+		add_action( 'wp_ajax_wfbt_check_dataset_health', array( __CLASS__, 'ajax_check_dataset_health' ) );
 	}
 
 	/**
@@ -69,6 +70,7 @@ class Admin_Settings {
 		register_setting( 'wfbt_settings_group', 'wfbt_access_token', array( 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_test_code', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_pixel', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'wfbt_settings_group', 'wfbt_enable_debug_bar', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_respect_consent', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_concord_cookie_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_consent_action', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -88,23 +90,35 @@ class Admin_Settings {
 		}
 
 		$i18n = array(
-			'testing'        => __( 'Testing...', 'wfbt-server-side' ),
-			'test_btn'       => __( 'Test API Connection (CAPI v21.0)', 'wfbt-server-side' ),
-			'success'        => __( '✓ Success! Test event received by Meta Graph API.', 'wfbt-server-side' ),
-			'failed'         => __( '✗ Failed: ', 'wfbt-server-side' ),
-			'ajax_error'     => __( '✗ Network error during AJAX test.', 'wfbt-server-side' ),
-			'queuing'        => __( 'Queuing...', 'wfbt-server-side' ),
-			'queued'         => __( 'Queued!', 'wfbt-server-side' ),
-			'resend'         => __( 'Resend', 'wfbt-server-side' ),
-			'status_pending' => __( 'Pending (Action Scheduler)', 'wfbt-server-side' ),
-			'error'          => __( 'Error: ', 'wfbt-server-side' ),
-			'resend_error'   => __( 'Network error while queuing the order.', 'wfbt-server-side' ),
+			'testing'            => __( 'Testing CAPI...', 'wfbt-server-side' ),
+			'test_btn'           => __( 'Test API Connection (CAPI v21.0)', 'wfbt-server-side' ),
+			'success'            => __( '✓ Success! Test event received by Meta Graph API.', 'wfbt-server-side' ),
+			'failed'             => __( '✗ Failed: ', 'wfbt-server-side' ),
+			'ajax_error'         => __( '✗ Network error during AJAX test.', 'wfbt-server-side' ),
+			'queuing'            => __( 'Queuing...', 'wfbt-server-side' ),
+			'queued'             => __( 'Queued!', 'wfbt-server-side' ),
+			'resend'             => __( 'Resend', 'wfbt-server-side' ),
+			'status_pending'     => __( 'Pending (Action Scheduler)', 'wfbt-server-side' ),
+			'error'              => __( 'Error: ', 'wfbt-server-side' ),
+			'resend_error'       => __( 'Network error while queuing the order.', 'wfbt-server-side' ),
+			'checking_dataset'   => __( 'Querying Meta Graph API...', 'wfbt-server-side' ),
+			'check_dataset_btn'  => __( 'Check Dataset Health (Graph API)', 'wfbt-server-side' ),
+			'dataset_connected'  => __( 'Connected to Meta Graph API v21.0', 'wfbt-server-side' ),
+			'dataset_name'       => __( 'Dataset Name', 'wfbt-server-side' ),
+			'last_fired'         => __( 'Last Event Received by Meta', 'wfbt-server-side' ),
+			'no_recent_activity' => __( 'No recent activity recorded yet', 'wfbt-server-side' ),
+			'api_response'       => __( 'Meta API Notice', 'wfbt-server-side' ),
+			'cookie_found'       => __( '✓ Found in current browser', 'wfbt-server-side' ),
+			'cookie_missing'     => __( '— Not detected in current browser', 'wfbt-server-side' ),
+			'cookie_no_ad_click' => __( '— No Meta Ad Click detected (?fbclid=)', 'wfbt-server-side' ),
 		);
 
 		$script = "
 			jQuery(document).ready(function($){
 				var wfbt_i18n = " . wp_json_encode( $i18n ) . ";
+				var wfbt_nonce = '" . wp_create_nonce( 'wfbt_admin_nonce' ) . "';
 
+				// 1. Meta CAPI Connection Test
 				$('#wfbt-test-connection').on('click', function(e){
 					e.preventDefault();
 					var btn = $(this);
@@ -113,7 +127,7 @@ class Admin_Settings {
 					
 					$.post( ajaxurl, {
 						action: 'wfbt_test_connection',
-						nonce: '" . wp_create_nonce( 'wfbt_admin_nonce' ) . "'
+						nonce: wfbt_nonce
 					}, function(response){
 						btn.prop('disabled', false).text(wfbt_i18n.test_btn);
 						if(response.success) {
@@ -127,6 +141,85 @@ class Admin_Settings {
 					});
 				});
 
+				// 2. Meta Dataset Health Check via Graph API
+				$('#wfbt-check-dataset-btn').on('click', function(e){
+					e.preventDefault();
+					var btn = $(this);
+					btn.prop('disabled', true).text(wfbt_i18n.checking_dataset);
+					$('#wfbt-dataset-result').html('');
+
+					$.post( ajaxurl, {
+						action: 'wfbt_check_dataset_health',
+						nonce: wfbt_nonce
+					}, function(response){
+						btn.prop('disabled', false).text(wfbt_i18n.check_dataset_btn);
+						if(response.success) {
+							var d = response.data;
+							var html = '<div style=\"background:#e7f7ed; border-left:4px solid #008a00; padding:10px 14px; margin-top:12px; font-size:13px;\">';
+							html += '<strong style=\"color:#008a00;\">' + wfbt_i18n.dataset_connected + '</strong><br>';
+							html += '<strong>' + wfbt_i18n.dataset_name + ':</strong> ' + (d.name || 'N/A') + ' | <strong>ID:</strong> ' + d.id + '<br>';
+							html += '<strong>' + wfbt_i18n.last_fired + ':</strong> <span style=\"color:#007cba; font-weight:600;\">' + (d.last_fired_time || wfbt_i18n.no_recent_activity) + '</span>';
+							html += '</div>';
+							$('#wfbt-dataset-result').html(html);
+						} else {
+							var noticeHtml = '<div style=\"background:#f0f6fc; border-left:4px solid #72aee6; padding:10px 14px; margin-top:12px; font-size:12.5px;\">';
+							noticeHtml += '<strong>' + wfbt_i18n.api_response + ':</strong> ' + response.data;
+							noticeHtml += '</div>';
+							$('#wfbt-dataset-result').html(noticeHtml);
+						}
+					}).fail(function(){
+						btn.prop('disabled', false).text(wfbt_i18n.check_dataset_btn);
+						$('#wfbt-dataset-result').html('<div style=\"color:#d93025; margin-top:8px;\">' + wfbt_i18n.ajax_error + '</div>');
+					});
+				});
+
+				// 3. In-Browser Cookie Inspector
+				function checkBrowserCookies() {
+					var cookies = document.cookie;
+					function getCookieVal(prefix) {
+						var parts = cookies.split(';');
+						for (var i = 0; i < parts.length; i++) {
+							var p = parts[i].trim().split('=');
+							if (p[0].toLowerCase().indexOf(prefix.toLowerCase()) !== -1) {
+								return p[1] ? decodeURIComponent(p[1]) : 'present';
+							}
+						}
+						return null;
+					}
+
+					// Concord
+					var concordPrefix = $('#wfbt-cookie-concord-box').data('prefix') || 'concord';
+					var cVal = getCookieVal(concordPrefix);
+					if (cVal) {
+						$('#wfbt-cookie-concord-box').html('<span style=\"color:#008a00; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">' + (cVal.substring(0, 24) + (cVal.length > 24 ? '...' : '')) + '</code>');
+					} else {
+						$('#wfbt-cookie-concord-box').html('<span style=\"color:#888;\">' + wfbt_i18n.cookie_missing + '</span>');
+					}
+
+					// _fbp
+					var fbpVal = getCookieVal('_fbp');
+					if (fbpVal) {
+						$('#wfbt-cookie-fbp-box').html('<span style=\"color:#007cba; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">' + (fbpVal.substring(0, 24) + '...') + '</code>');
+					} else {
+						$('#wfbt-cookie-fbp-box').html('<span style=\"color:#888;\">' + wfbt_i18n.cookie_missing + '</span>');
+					}
+
+					// _fbc / wfbt_fbclid
+					var fbcVal = getCookieVal('_fbc') || getCookieVal('wfbt_fbclid');
+					if (fbcVal) {
+						$('#wfbt-cookie-fbc-box').html('<span style=\"color:#007cba; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">' + (fbcVal.substring(0, 24) + '...') + '</code>');
+					} else {
+						$('#wfbt-cookie-fbc-box').html('<span style=\"color:#888;\">' + wfbt_i18n.cookie_no_ad_click + '</span>');
+					}
+				}
+
+				checkBrowserCookies();
+				$('#wfbt-refresh-cookies-btn').on('click', function(e){
+					e.preventDefault();
+					checkBrowserCookies();
+				});
+
+				// 4. Resend Order Action
 				$('.wfbt-resend-btn').on('click', function(e){
 					e.preventDefault();
 					var btn = $(this);
@@ -136,7 +229,7 @@ class Admin_Settings {
 					$.post( ajaxurl, {
 						action: 'wfbt_resend_order',
 						order_id: order_id,
-						nonce: '" . wp_create_nonce( 'wfbt_admin_nonce' ) . "'
+						nonce: wfbt_nonce
 					}, function(response){
 						if(response.success) {
 							btn.text(wfbt_i18n.queued);
@@ -236,6 +329,16 @@ class Admin_Settings {
 						<p class="description"><?php esc_html_e( 'Injects fbevents.js and fires PageView, ViewContent, AddToCart (AJAX), InitiateCheckout, and Purchase with eventID deduplication.', 'wfbt-server-side' ); ?></p>
 					</td>
 				</tr>
+				<tr valign="top">
+					<th scope="row"><?php esc_html_e( 'Front-End Debugger Bar', 'wfbt-server-side' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="wfbt_enable_debug_bar" value="yes" <?php checked( get_option( 'wfbt_enable_debug_bar', 'yes' ), 'yes' ); ?> />
+							<strong><?php esc_html_e( 'Enable live floating debug bar for administrators', 'wfbt-server-side' ); ?></strong>
+						</label>
+						<p class="description"><?php esc_html_e( 'Displays an expandable tracking inspector at the bottom-right of your store pages when logged in as admin or store manager. Allows you to verify fbq event triggers, Concord consent, and _fbp/_fbc cookies in real-time. Completely invisible to regular shoppers.', 'wfbt-server-side' ); ?></p>
+					</td>
+				</tr>
 			</table>
 
 			<hr style="margin: 30px 0;" />
@@ -325,112 +428,471 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Render Diagnostics Tab.
+	 * Render Comprehensive Diagnostics Dashboard Tab.
 	 */
 	private static function render_diagnostics_tab() {
-		?>
-		<div style="background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 4px; margin-bottom: 25px;">
-			<h3 style="margin-top: 0;"><?php esc_html_e( 'Meta CAPI Connection Test (v21.0)', 'wfbt-server-side' ); ?></h3>
-			<p><?php esc_html_e( 'Sends an immediate dummy Purchase test event to Meta Graph API using your configured Test Event Code.', 'wfbt-server-side' ); ?></p>
-			<button id="wfbt-test-connection" class="button button-primary"><?php esc_html_e( 'Test API Connection (CAPI v21.0)', 'wfbt-server-side' ); ?></button>
-			<span id="wfbt-test-result" style="margin-left: 15px;"></span>
-		</div>
+		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
+		$access_token = get_option( 'wfbt_access_token', '' );
+		$test_code    = get_option( 'wfbt_test_code', '' );
+		$enable_pixel = get_option( 'wfbt_enable_pixel', 'yes' );
+		$debug_bar    = get_option( 'wfbt_enable_debug_bar', 'yes' );
+		$respect_c    = get_option( 'wfbt_respect_consent', 'yes' );
+		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$consent_act  = get_option( 'wfbt_consent_action', 'anonymize' );
 
-		<h3><?php esc_html_e( 'Last 20 WooCommerce Orders (CAPI & Cookies Audit)', 'wfbt-server-side' ); ?></h3>
-		<p class="description">
-			<?php esc_html_e( 'Native HPOS inspection of advertising identifiers (_fbp, _fbc), Concord consent state, and CAPI transmission status.', 'wfbt-server-side' ); ?>
-		</p>
-		<table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
-			<thead>
-				<tr>
-					<th style="width: 130px;"><?php esc_html_e( 'Order', 'wfbt-server-side' ); ?></th>
-					<th style="width: 140px;"><?php esc_html_e( 'Date', 'wfbt-server-side' ); ?></th>
-					<th style="width: 100px;"><?php esc_html_e( 'Total', 'wfbt-server-side' ); ?></th>
-					<th style="width: 180px;"><?php esc_html_e( 'Meta CAPI Status', 'wfbt-server-side' ); ?></th>
-					<th><?php esc_html_e( '_fbp Cookie', 'wfbt-server-side' ); ?></th>
-					<th><?php esc_html_e( '_fbc Cookie', 'wfbt-server-side' ); ?></th>
-					<th style="width: 130px;"><?php esc_html_e( 'Concord Consent', 'wfbt-server-side' ); ?></th>
-					<th style="width: 120px;"><?php esc_html_e( 'Actions', 'wfbt-server-side' ); ?></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php
-				$orders = function_exists( 'wc_get_orders' ) ? wc_get_orders( array(
-					'limit'   => 20,
-					'orderby' => 'date',
-					'order'   => 'DESC',
-				) ) : array();
+		// 1. Environment & Architecture status
+		$is_hpos   = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+		$as_active = function_exists( 'as_schedule_single_action' );
 
-				if ( empty( $orders ) ) {
-					echo '<tr><td colspan="8">' . esc_html__( 'No orders found.', 'wfbt-server-side' ) . '</td></tr>';
-				} else {
-					foreach ( $orders as $order ) {
-						if ( ! $order instanceof \WC_Order ) {
-							continue;
-						}
-						$order_id    = $order->get_id();
-						$status      = $order->get_meta( '_wfbt_capi_status' ) ?: 'Pending';
-						$error       = $order->get_meta( '_wfbt_capi_error' );
-						$sent_at     = $order->get_meta( '_wfbt_capi_sent_at' );
-						$fbp         = $order->get_meta( '_wfbt_fbp' );
-						$fbc         = $order->get_meta( '_wfbt_fbc' );
-						$consent     = $order->get_meta( '_wfbt_consent' );
+		// 2. Fetch last 30 days orders for KPIs
+		$thirty_days_ago = date( 'Y-m-d H:i:s', time() - ( 30 * DAY_IN_SECONDS ) );
+		$orders_30d      = function_exists( 'wc_get_orders' ) ? wc_get_orders( array(
+			'limit'        => 200,
+			'date_created' => '>=' . $thirty_days_ago,
+			'orderby'      => 'date',
+			'order'        => 'DESC',
+		) ) : array();
 
-						// Status formatting
-						if ( 'Success' === $status ) {
-							$status_html = '<span style="color:#008a00; font-weight:bold;">✓ ' . esc_html__( 'Success', 'wfbt-server-side' ) . '</span>';
-							if ( $sent_at ) {
-								$status_html .= '<br><small style="color:#666;">' . esc_html( $sent_at ) . '</small>';
-							}
-						} elseif ( 'Failed' === $status ) {
-							$status_html = '<span style="color:#d93025; font-weight:bold;">✗ ' . esc_html__( 'Failed', 'wfbt-server-side' ) . '</span>';
-							if ( $error ) {
-								$status_html .= '<br><small style="color:#d93025; display:inline-block; max-width:200px; word-break:break-word;">' . esc_html( $error ) . '</small>';
-							}
-						} elseif ( false !== strpos( $status, 'Ignored' ) ) {
-							$status_html = '<span style="color:#e37400; font-weight:bold;">⊘ ' . esc_html( $status ) . '</span>';
-						} else {
-							$status_html = '<span style="color:#5f6368;">' . esc_html__( 'Pending', 'wfbt-server-side' ) . '</span>';
-						}
+		$total_orders_30d = count( $orders_30d );
+		$capi_success_cnt = 0;
+		$fbp_cnt          = 0;
+		$fbc_cnt          = 0;
+		$consent_ok_cnt   = 0;
+		$consent_no_cnt   = 0;
 
-						// _fbp formatting
-						if ( ! empty( $fbp ) ) {
-							$fbp_html = '<span style="color:#007cba; font-weight:600;">✓ ' . esc_html__( 'Yes', 'wfbt-server-side' ) . '</span><br><code style="font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;">' . esc_html( substr( $fbp, 0, 16 ) . '...' ) . '</code>';
-						} else {
-							$fbp_html = '<span style="color:#888;">— ' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
-						}
+		// Group for last 14 days activity
+		$chart_days = array();
+		for ( $d = 13; $d >= 0; $d-- ) {
+			$dt               = time() - ( $d * DAY_IN_SECONDS );
+			$k                = date( 'Y-m-d', $dt );
+			$chart_days[ $k ] = array(
+				'label'   => date( 'd/m', $dt ),
+				'total'   => 0,
+				'success' => 0,
+				'fbp'     => 0,
+				'fbc'     => 0,
+			);
+		}
 
-						// _fbc formatting
-						if ( ! empty( $fbc ) ) {
-							$fbc_html = '<span style="color:#007cba; font-weight:600;">✓ ' . esc_html__( 'Yes', 'wfbt-server-side' ) . '</span><br><code style="font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;">' . esc_html( substr( $fbc, 0, 18 ) . '...' ) . '</code>';
-						} else {
-							$fbc_html = '<span style="color:#888;">— ' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
-						}
+		foreach ( $orders_30d as $ord ) {
+			if ( ! $ord instanceof \WC_Order ) {
+				continue;
+			}
+			$st  = $ord->get_meta( '_wfbt_capi_status' );
+			$fbp = $ord->get_meta( '_wfbt_fbp' );
+			$fbc = $ord->get_meta( '_wfbt_fbc' );
+			$cst = $ord->get_meta( '_wfbt_consent' );
 
-						// Consent formatting
-						if ( 'granted' === $consent ) {
-							$consent_html = '<span style="background:#e7f7ed; color:#008a00; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'Granted', 'wfbt-server-side' ) . '</span>';
-						} elseif ( 'denied' === $consent ) {
-							$consent_html = '<span style="background:#fce8e6; color:#d93025; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'Denied', 'wfbt-server-side' ) . '</span>';
-						} else {
-							$consent_html = '<span style="background:#f1f3f4; color:#5f6368; padding:3px 8px; border-radius:4px; font-size:12px;">' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
-						}
+			if ( 'Success' === $st ) {
+				$capi_success_cnt++;
+			}
+			if ( ! empty( $fbp ) ) {
+				$fbp_cnt++;
+			}
+			if ( ! empty( $fbc ) ) {
+				$fbc_cnt++;
+			}
+			if ( 'granted' === $cst ) {
+				$consent_ok_cnt++;
+			} elseif ( 'denied' === $cst ) {
+				$consent_no_cnt++;
+			}
 
-						echo '<tr>';
-						echo '<td><a href="' . esc_url( admin_url( 'post.php?post=' . $order_id . '&action=edit' ) ) . '"><strong>#' . esc_html( $order_id ) . '</strong></a></td>';
-						echo '<td>' . esc_html( $order->get_date_created() ? wc_format_datetime( $order->get_date_created() ) : '' ) . '</td>';
-						echo '<td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td>';
-						echo '<td class="wfbt-status-cell">' . wp_kses_post( $status_html ) . '</td>';
-						echo '<td>' . wp_kses_post( $fbp_html ) . '</td>';
-						echo '<td>' . wp_kses_post( $fbc_html ) . '</td>';
-						echo '<td>' . wp_kses_post( $consent_html ) . '</td>';
-						echo '<td><button class="button button-secondary wfbt-resend-btn" data-order-id="' . esc_attr( $order_id ) . '">' . esc_html__( 'Resend', 'wfbt-server-side' ) . '</button></td>';
-						echo '</tr>';
-					}
+			$dt_obj  = $ord->get_date_created();
+			$day_str = $dt_obj ? $dt_obj->date( 'Y-m-d' ) : '';
+			if ( isset( $chart_days[ $day_str ] ) ) {
+				$chart_days[ $day_str ]['total']++;
+				if ( 'Success' === $st ) {
+					$chart_days[ $day_str ]['success']++;
 				}
-				?>
-			</tbody>
-		</table>
+				if ( ! empty( $fbp ) ) {
+					$chart_days[ $day_str ]['fbp']++;
+				}
+				if ( ! empty( $fbc ) ) {
+					$chart_days[ $day_str ]['fbc']++;
+				}
+			}
+		}
+
+		$capi_rate = $total_orders_30d > 0 ? round( ( $capi_success_cnt / $total_orders_30d ) * 100 ) : 0;
+		$fbp_rate  = $total_orders_30d > 0 ? round( ( $fbp_cnt / $total_orders_30d ) * 100 ) : 0;
+		$fbc_rate  = $total_orders_30d > 0 ? round( ( $fbc_cnt / $total_orders_30d ) * 100 ) : 0;
+
+		$max_day_orders = 1;
+		foreach ( $chart_days as $cday ) {
+			if ( $cday['total'] > $max_day_orders ) {
+				$max_day_orders = $cday['total'];
+			}
+		}
+		?>
+		<div style="max-width: 1100px;">
+			<!-- 1. System Health Pre-Flight Checklist Grid -->
+			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 25px;">
+				<!-- Tile 1: Credentials -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+						<span><?php esc_html_e( '1. Meta Credentials', 'wfbt-server-side' ); ?></span>
+						<?php if ( ! empty( $pixel_id ) && ! empty( $access_token ) ) : ?>
+							<span style="color:#008a00; font-size:11px; background:#e7f7ed; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Ready', 'wfbt-server-side' ); ?></span>
+						<?php else : ?>
+							<span style="color:#d93025; font-size:11px; background:#fce8e6; padding:2px 6px; border-radius:3px;">✗ <?php esc_html_e( 'Missing', 'wfbt-server-side' ); ?></span>
+						<?php endif; ?>
+					</div>
+					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
+						<div>Pixel ID: <strong><?php echo esc_html( $pixel_id ?: __( 'Not set', 'wfbt-server-side' ) ); ?></strong></div>
+						<div>Token: <strong><?php echo $access_token ? esc_html( substr( $access_token, 0, 8 ) . '...' ) : esc_html__( 'Not set', 'wfbt-server-side' ); ?></strong></div>
+						<div>
+							Mode: 
+							<?php if ( ! empty( $test_code ) ) : ?>
+								<?php /* translators: %s: Meta test event code */ ?>
+								<span style="color:#dba617; font-weight:600;">⚠️ <?php printf( esc_html__( 'Test (%s)', 'wfbt-server-side' ), esc_html( $test_code ) ); ?></span>
+							<?php else : ?>
+								<span style="color:#008a00; font-weight:600;">✓ <?php esc_html_e( 'Live Production', 'wfbt-server-side' ); ?></span>
+							<?php endif; ?>
+						</div>
+					</div>
+				</div>
+
+				<!-- Tile 2: Architecture & HPOS -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+						<span><?php esc_html_e( '2. Architecture & HPOS', 'wfbt-server-side' ); ?></span>
+						<span style="color:#008a00; font-size:11px; background:#e7f7ed; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Optimized', 'wfbt-server-side' ); ?></span>
+					</div>
+					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
+						<div>HPOS: <strong><?php echo $is_hpos ? esc_html__( 'Active (Native CRUD)', 'wfbt-server-side' ) : esc_html__( 'Legacy PostMeta', 'wfbt-server-side' ); ?></strong></div>
+						<div>Action Scheduler: <strong><?php echo $as_active ? esc_html__( 'Available (Async CAPI)', 'wfbt-server-side' ) : esc_html__( 'Inactive', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'Deduplication key:', 'wfbt-server-side' ); ?> <code>order_{id}</code></div>
+					</div>
+				</div>
+
+				<!-- Tile 3: GDPR Concord -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+						<span><?php esc_html_e( '3. GDPR Concord Banner', 'wfbt-server-side' ); ?></span>
+						<span style="color:#007cba; font-size:11px; background:#f0f6fc; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Compliant', 'wfbt-server-side' ); ?></span>
+					</div>
+					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
+						<div><?php esc_html_e( 'Cookie prefix:', 'wfbt-server-side' ); ?> <code><?php echo esc_html( $cookie_name ); ?></code></div>
+						<div><?php esc_html_e( 'Enforce consent:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $respect_c ? esc_html__( 'Yes (Dynamic)', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'If refused:', 'wfbt-server-side' ); ?> <strong><?php echo 'anonymize' === $consent_act ? esc_html__( 'Anonymize (No PII)', 'wfbt-server-side' ) : esc_html__( 'Cancel event', 'wfbt-server-side' ); ?></strong></div>
+					</div>
+				</div>
+
+				<!-- Tile 4: Front-End Debugger -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+						<span><?php esc_html_e( '4. Front-End Debugger', 'wfbt-server-side' ); ?></span>
+						<?php if ( 'yes' === $debug_bar ) : ?>
+							<span style="color:#008a00; font-size:11px; background:#e7f7ed; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Enabled', 'wfbt-server-side' ); ?></span>
+						<?php else : ?>
+							<span style="color:#646970; font-size:11px; background:#f0f0f1; padding:2px 6px; border-radius:3px;"><?php esc_html_e( 'Off', 'wfbt-server-side' ); ?></span>
+						<?php endif; ?>
+					</div>
+					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
+						<div><?php esc_html_e( 'Browser Pixel (fbq):', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $enable_pixel ? esc_html__( 'Active', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'Admin Floating Bar:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $debug_bar ? esc_html__( 'Visible for Admins', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'URL Trigger:', 'wfbt-server-side' ); ?> <code>?wfbt_debug=1</code></div>
+					</div>
+				</div>
+			</div>
+
+			<!-- 2. Interactive Tools: In-Browser Cookie Inspector & Meta Graph API Query -->
+			<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px;">
+				<!-- Card A: Browser Cookie Inspector -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+						<h3 style="margin: 0; font-size: 15px; color: #1d2327;">
+							🍪 <?php esc_html_e( 'In-Browser Cookie Inspector (Active Session)', 'wfbt-server-side' ); ?>
+						</h3>
+						<button type="button" id="wfbt-refresh-cookies-btn" class="button button-small">
+							<?php esc_html_e( 'Refresh', 'wfbt-server-side' ); ?>
+						</button>
+					</div>
+					<p style="font-size: 12.5px; color: #50575e; margin-bottom: 15px;">
+						<?php esc_html_e( 'Tests advertising cookies and consent state currently present in your active browser session on this domain:', 'wfbt-server-side' ); ?>
+					</p>
+
+					<div style="display: flex; flex-direction: column; gap: 10px; font-size: 12.5px;">
+						<div style="padding: 8px 12px; background: #f6f7f7; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+							<span>Concord (<code><?php echo esc_html( $cookie_name ); ?></code>):</span>
+							<div id="wfbt-cookie-concord-box" data-prefix="<?php echo esc_attr( $cookie_name ); ?>" style="text-align: right;">
+								<span style="color:#888;"><?php esc_html_e( 'Checking...', 'wfbt-server-side' ); ?></span>
+							</div>
+						</div>
+
+						<div style="padding: 8px 12px; background: #f6f7f7; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+							<span><code>_fbp</code> (Browser ID Meta):</span>
+							<div id="wfbt-cookie-fbp-box" style="text-align: right;">
+								<span style="color:#888;"><?php esc_html_e( 'Checking...', 'wfbt-server-side' ); ?></span>
+							</div>
+						</div>
+
+						<div style="padding: 8px 12px; background: #f6f7f7; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+							<span><code>_fbc</code> (Click ID Meta / fbclid):</span>
+							<div id="wfbt-cookie-fbc-box" style="text-align: right;">
+								<span style="color:#888;"><?php esc_html_e( 'Checking...', 'wfbt-server-side' ); ?></span>
+							</div>
+						</div>
+					</div>
+
+					<div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #f0f0f1;">
+						<a href="<?php echo esc_url( add_query_arg( array( 'fbclid' => 'SOYOO_TEST_DIAGNOSTIC_' . wp_rand( 1000, 9999 ), 'wfbt_debug' => '1' ), home_url( '/' ) ) ); ?>" target="_blank" rel="noopener noreferrer" class="button button-secondary" style="width: 100%; text-align: center;">
+							<span class="dashicons dashicons-external" style="vertical-align: middle; font-size: 14px;"></span>
+							<?php esc_html_e( 'Test Shop with Simulated Meta Click (?fbclid=...)', 'wfbt-server-side' ); ?>
+						</a>
+					</div>
+				</div>
+
+				<!-- Card B: Meta API Tests -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+					<h3 style="margin: 0 0 12px; font-size: 15px; color: #1d2327;">
+						⚡ <?php esc_html_e( 'Meta Graph API & CAPI Diagnostics (v21.0)', 'wfbt-server-side' ); ?>
+					</h3>
+					<p style="font-size: 12.5px; color: #50575e; margin-bottom: 15px;">
+						<?php esc_html_e( 'Execute live direct requests to Meta Graph API to verify token validity, Dataset availability, and event delivery:', 'wfbt-server-side' ); ?>
+					</p>
+
+					<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
+						<button type="button" id="wfbt-check-dataset-btn" class="button button-secondary">
+							<span class="dashicons dashicons-cloud" style="vertical-align: middle; font-size: 15px;"></span>
+							<?php esc_html_e( 'Check Dataset Health (Graph API)', 'wfbt-server-side' ); ?>
+						</button>
+						<button type="button" id="wfbt-test-connection" class="button button-primary">
+							<?php esc_html_e( 'Test API Connection (CAPI v21.0)', 'wfbt-server-side' ); ?>
+						</button>
+					</div>
+
+					<div id="wfbt-dataset-result"></div>
+					<div id="wfbt-test-result" style="margin-top: 10px;"></div>
+				</div>
+			</div>
+
+			<!-- 3. HPOS 30-Day Activity KPIs & 14-Day Activity Histogram -->
+			<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 22px; margin-bottom: 25px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+				<div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; margin-bottom: 15px;">
+					<div>
+						<h3 style="margin: 0; font-size: 16px; color: #1d2327;">
+							📊 <?php esc_html_e( '30-Day Tracking Performance & Activity (WooCommerce HPOS)', 'wfbt-server-side' ); ?>
+						</h3>
+						<p style="margin: 4px 0 0; font-size: 12.5px; color: #646970;">
+							<?php /* translators: %d: Total number of orders */ ?>
+							<?php printf( esc_html__( 'Calculated directly from %d recent orders across the last 30 days with zero front-end overhead.', 'wfbt-server-side' ), $total_orders_30d ); ?>
+						</p>
+					</div>
+					<div style="font-size: 12px; color: #646970;">
+						<?php /* translators: 1: Granted consent count, 2: Denied consent count */ ?>
+						<?php printf( esc_html__( 'Concord Consent: %1$d Granted / %2$d Anonymized or Denied', 'wfbt-server-side' ), $consent_ok_cnt, $consent_no_cnt ); ?>
+					</div>
+				</div>
+
+				<!-- 4 KPI Metrics Tiles -->
+				<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px;">
+					<div style="background: #f6f7f7; padding: 14px; border-radius: 6px; border-left: 4px solid #008a00;">
+						<div style="font-size: 11px; text-transform: uppercase; color: #646970; font-weight: 600;"><?php esc_html_e( 'CAPI Success Rate', 'wfbt-server-side' ); ?></div>
+						<div style="font-size: 24px; font-weight: 700; color: #008a00; margin-top: 4px;"><?php echo esc_html( $capi_rate ); ?>%</div>
+						<?php /* translators: 1: Successful orders count, 2: Total orders count */ ?>
+						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php printf( esc_html__( '%1$d / %2$d orders sent', 'wfbt-server-side' ), $capi_success_cnt, $total_orders_30d ); ?></div>
+					</div>
+
+					<div style="background: #f6f7f7; padding: 14px; border-radius: 6px; border-left: 4px solid #007cba;">
+						<div style="font-size: 11px; text-transform: uppercase; color: #646970; font-weight: 600;"><?php esc_html_e( '_fbp Capture Rate (Pixel)', 'wfbt-server-side' ); ?></div>
+						<div style="font-size: 24px; font-weight: 700; color: #007cba; margin-top: 4px;"><?php echo esc_html( $fbp_rate ); ?>%</div>
+						<?php /* translators: %d: Number of buyers with fbp */ ?>
+						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php printf( esc_html__( '%d buyers with Browser ID', 'wfbt-server-side' ), $fbp_cnt ); ?></div>
+					</div>
+
+					<div style="background: #f6f7f7; padding: 14px; border-radius: 6px; border-left: 4px solid #7b1fa2;">
+						<div style="font-size: 11px; text-transform: uppercase; color: #646970; font-weight: 600;"><?php esc_html_e( '_fbc Meta Ad Click Rate', 'wfbt-server-side' ); ?></div>
+						<div style="font-size: 24px; font-weight: 700; color: #7b1fa2; margin-top: 4px;"><?php echo esc_html( $fbc_rate ); ?>%</div>
+						<?php /* translators: %d: Number of buyers from Meta Ads */ ?>
+						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php printf( esc_html__( '%d buyers from Meta Ads', 'wfbt-server-side' ), $fbc_cnt ); ?></div>
+					</div>
+
+					<div style="background: #f6f7f7; padding: 14px; border-radius: 6px; border-left: 4px solid #1877f2;">
+						<div style="font-size: 11px; text-transform: uppercase; color: #646970; font-weight: 600;"><?php esc_html_e( 'Total Orders Tracked', 'wfbt-server-side' ); ?></div>
+						<div style="font-size: 24px; font-weight: 700; color: #1877f2; margin-top: 4px;"><?php echo esc_html( $total_orders_30d ); ?></div>
+						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php esc_html_e( 'Last 30 days volume', 'wfbt-server-side' ); ?></div>
+					</div>
+				</div>
+
+				<!-- 14-Day Activity Bar Chart (SVG Native) -->
+				<div style="margin-top: 10px;">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+						<span style="font-weight: 600; font-size: 13px; color: #1d2327;"><?php esc_html_e( 'Daily Activity Histogram (Last 14 Days)', 'wfbt-server-side' ); ?></span>
+						<div style="display: flex; gap: 15px; font-size: 11.5px; color: #50575e;">
+							<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #008a00; border-radius: 2px; display: inline-block;"></span> <?php esc_html_e( 'CAPI Success', 'wfbt-server-side' ); ?></span>
+							<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #007cba; border-radius: 2px; display: inline-block;"></span> <?php esc_html_e( 'Pixel _fbp', 'wfbt-server-side' ); ?></span>
+							<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #7b1fa2; border-radius: 2px; display: inline-block;"></span> <?php esc_html_e( 'Meta Ad _fbc', 'wfbt-server-side' ); ?></span>
+							<span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 10px; height: 10px; background: #dcdcde; border-radius: 2px; display: inline-block;"></span> <?php esc_html_e( 'Total Orders', 'wfbt-server-side' ); ?></span>
+						</div>
+					</div>
+
+					<div style="background: #fdfdfd; border: 1px solid #e2e4e7; border-radius: 6px; padding: 12px 10px 6px;">
+						<svg viewBox="0 0 740 160" width="100%" height="160" style="display: block; overflow: visible;">
+							<!-- Grid Lines -->
+							<line x1="30" y1="20" x2="730" y2="20" stroke="#f0f0f1" stroke-dasharray="2,2" />
+							<line x1="30" y1="70" x2="730" y2="70" stroke="#f0f0f1" stroke-dasharray="2,2" />
+							<line x1="30" y1="120" x2="730" y2="120" stroke="#dcdcde" stroke-width="1" />
+
+							<?php
+							$idx       = 0;
+							$slot_w    = 50;
+							$bar_max_h = 95;
+							foreach ( $chart_days as $day_k => $day_info ) {
+								$x = 40 + ( $idx * $slot_w );
+
+								$h_total   = $max_day_orders > 0 ? round( ( $day_info['total'] / $max_day_orders ) * $bar_max_h ) : 0;
+								$h_success = $max_day_orders > 0 ? round( ( $day_info['success'] / $max_day_orders ) * $bar_max_h ) : 0;
+								$h_fbp     = $max_day_orders > 0 ? round( ( $day_info['fbp'] / $max_day_orders ) * $bar_max_h ) : 0;
+								$h_fbc     = $max_day_orders > 0 ? round( ( $day_info['fbc'] / $max_day_orders ) * $bar_max_h ) : 0;
+
+								$y_base = 120;
+								?>
+								<!-- Slot: <?php echo esc_attr( $day_info['label'] ); ?> -->
+								<g>
+									<title><?php echo esc_attr( $day_info['label'] . ' : ' . $day_info['total'] . ' orders (' . $day_info['success'] . ' CAPI Success, ' . $day_info['fbp'] . ' _fbp, ' . $day_info['fbc'] . ' _fbc)' ); ?></title>
+
+									<!-- Total Bar -->
+									<?php if ( $h_total > 0 ) : ?>
+										<rect x="<?php echo esc_attr( $x ); ?>" y="<?php echo esc_attr( $y_base - $h_total ); ?>" width="32" height="<?php echo esc_attr( $h_total ); ?>" fill="#e2e4e7" rx="3" />
+									<?php else : ?>
+										<rect x="<?php echo esc_attr( $x + 12 ); ?>" y="<?php echo esc_attr( $y_base - 2 ); ?>" width="8" height="2" fill="#e2e4e7" />
+									<?php endif; ?>
+
+									<!-- Success Sub-bar -->
+									<?php if ( $h_success > 0 ) : ?>
+										<rect x="<?php echo esc_attr( $x + 2 ); ?>" y="<?php echo esc_attr( $y_base - $h_success ); ?>" width="8" height="<?php echo esc_attr( $h_success ); ?>" fill="#008a00" rx="2" />
+									<?php endif; ?>
+
+									<!-- fbp Sub-bar -->
+									<?php if ( $h_fbp > 0 ) : ?>
+										<rect x="<?php echo esc_attr( $x + 12 ); ?>" y="<?php echo esc_attr( $y_base - $h_fbp ); ?>" width="8" height="<?php echo esc_attr( $h_fbp ); ?>" fill="#007cba" rx="2" />
+									<?php endif; ?>
+
+									<!-- fbc Sub-bar -->
+									<?php if ( $h_fbc > 0 ) : ?>
+										<rect x="<?php echo esc_attr( $x + 22 ); ?>" y="<?php echo esc_attr( $y_base - $h_fbc ); ?>" width="8" height="<?php echo esc_attr( $h_fbc ); ?>" fill="#7b1fa2" rx="2" />
+									<?php endif; ?>
+
+									<!-- Label -->
+									<text x="<?php echo esc_attr( $x + 16 ); ?>" y="140" text-anchor="middle" font-size="10" fill="#646970" font-family="sans-serif">
+										<?php echo esc_html( $day_info['label'] ); ?>
+									</text>
+									<?php if ( $day_info['total'] > 0 ) : ?>
+										<text x="<?php echo esc_attr( $x + 16 ); ?>" y="<?php echo esc_attr( $y_base - $h_total - 4 ); ?>" text-anchor="middle" font-size="9" fill="#1d2327" font-weight="600" font-family="sans-serif">
+											<?php echo esc_html( $day_info['total'] ); ?>
+										</text>
+									<?php endif; ?>
+								</g>
+								<?php
+								$idx++;
+							}
+							?>
+						</svg>
+					</div>
+				</div>
+			</div>
+
+			<!-- 4. Last 20 Orders HPOS Audit Table -->
+			<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+				<h3 style="margin-top: 0; font-size: 16px; color: #1d2327;"><?php esc_html_e( 'Recent WooCommerce Orders (Live HPOS Audit & Resend)', 'wfbt-server-side' ); ?></h3>
+				<p class="description" style="margin-bottom: 12px;">
+					<?php esc_html_e( 'Native HPOS inspection of advertising identifiers (_fbp, _fbc), Concord consent state, and CAPI transmission status.', 'wfbt-server-side' ); ?>
+				</p>
+				<table class="wp-list-table widefat fixed striped">
+					<thead>
+						<tr>
+							<th style="width: 110px;"><?php esc_html_e( 'Order', 'wfbt-server-side' ); ?></th>
+							<th style="width: 140px;"><?php esc_html_e( 'Date', 'wfbt-server-side' ); ?></th>
+							<th style="width: 90px;"><?php esc_html_e( 'Total', 'wfbt-server-side' ); ?></th>
+							<th style="width: 170px;"><?php esc_html_e( 'Meta CAPI Status', 'wfbt-server-side' ); ?></th>
+							<th><?php esc_html_e( '_fbp Cookie', 'wfbt-server-side' ); ?></th>
+							<th><?php esc_html_e( '_fbc Cookie', 'wfbt-server-side' ); ?></th>
+							<th style="width: 120px;"><?php esc_html_e( 'Concord Consent', 'wfbt-server-side' ); ?></th>
+							<th style="width: 100px;"><?php esc_html_e( 'Actions', 'wfbt-server-side' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php
+						$orders_recent = function_exists( 'wc_get_orders' ) ? wc_get_orders( array(
+							'limit'   => 20,
+							'orderby' => 'date',
+							'order'   => 'DESC',
+						) ) : array();
+
+						if ( empty( $orders_recent ) ) {
+							echo '<tr><td colspan="8">' . esc_html__( 'No orders found.', 'wfbt-server-side' ) . '</td></tr>';
+						} else {
+							foreach ( $orders_recent as $order ) {
+								if ( ! $order instanceof \WC_Order ) {
+									continue;
+								}
+								$order_id = $order->get_id();
+								$status   = $order->get_meta( '_wfbt_capi_status' ) ?: 'Pending';
+								$error    = $order->get_meta( '_wfbt_capi_error' );
+								$sent_at  = $order->get_meta( '_wfbt_capi_sent_at' );
+								$fbp      = $order->get_meta( '_wfbt_fbp' );
+								$fbc      = $order->get_meta( '_wfbt_fbc' );
+								$consent  = $order->get_meta( '_wfbt_consent' );
+
+								// Status formatting
+								if ( 'Success' === $status ) {
+									$status_html = '<span style="color:#008a00; font-weight:bold;">✓ ' . esc_html__( 'Success', 'wfbt-server-side' ) . '</span>';
+									if ( $sent_at ) {
+										$status_html .= '<br><small style="color:#666;">' . esc_html( $sent_at ) . '</small>';
+									}
+								} elseif ( 'Failed' === $status ) {
+									$status_html = '<span style="color:#d93025; font-weight:bold;">✗ ' . esc_html__( 'Failed', 'wfbt-server-side' ) . '</span>';
+									if ( $error ) {
+										$status_html .= '<br><small style="color:#d93025; display:inline-block; max-width:180px; word-break:break-word;">' . esc_html( $error ) . '</small>';
+									}
+								} elseif ( false !== strpos( $status, 'Ignored' ) ) {
+									$status_html = '<span style="color:#e37400; font-weight:bold;">⊘ ' . esc_html( $status ) . '</span>';
+								} else {
+									$status_html = '<span style="color:#5f6368;">' . esc_html__( 'Pending', 'wfbt-server-side' ) . '</span>';
+								}
+
+								// _fbp formatting
+								if ( ! empty( $fbp ) ) {
+									$fbp_html = '<span style="color:#007cba; font-weight:600;">✓ ' . esc_html__( 'Yes', 'wfbt-server-side' ) . '</span><br><code style="font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;">' . esc_html( substr( $fbp, 0, 16 ) . '...' ) . '</code>';
+								} else {
+									$fbp_html = '<span style="color:#888;">— ' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
+								}
+
+								// _fbc formatting
+								if ( ! empty( $fbc ) ) {
+									$fbc_html = '<span style="color:#7b1fa2; font-weight:600;">✓ ' . esc_html__( 'Yes', 'wfbt-server-side' ) . '</span><br><code style="font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;">' . esc_html( substr( $fbc, 0, 18 ) . '...' ) . '</code>';
+								} else {
+									$fbc_html = '<span style="color:#888;">— ' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
+								}
+
+								// Consent formatting
+								if ( 'granted' === $consent ) {
+									$consent_html = '<span style="background:#e7f7ed; color:#008a00; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'Granted', 'wfbt-server-side' ) . '</span>';
+								} elseif ( 'denied' === $consent ) {
+									$consent_html = '<span style="background:#fce8e6; color:#d93025; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'Denied', 'wfbt-server-side' ) . '</span>';
+								} else {
+									$consent_html = '<span style="background:#f1f3f4; color:#5f6368; padding:3px 8px; border-radius:4px; font-size:12px;">' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
+								}
+
+								echo '<tr>';
+								echo '<td><a href="' . esc_url( admin_url( 'post.php?post=' . $order_id . '&action=edit' ) ) . '"><strong>#' . esc_html( $order_id ) . '</strong></a></td>';
+								echo '<td>' . esc_html( $order->get_date_created() ? wc_format_datetime( $order->get_date_created() ) : '' ) . '</td>';
+								echo '<td>' . wp_kses_post( $order->get_formatted_order_total() ) . '</td>';
+								echo '<td class="wfbt-status-cell">' . wp_kses_post( $status_html ) . '</td>';
+								echo '<td>' . wp_kses_post( $fbp_html ) . '</td>';
+								echo '<td>' . wp_kses_post( $fbc_html ) . '</td>';
+								echo '<td>' . wp_kses_post( $consent_html ) . '</td>';
+								echo '<td><button class="button button-secondary wfbt-resend-btn" data-order-id="' . esc_attr( $order_id ) . '">' . esc_html__( 'Resend', 'wfbt-server-side' ) . '</button></td>';
+								echo '</tr>';
+							}
+						}
+						?>
+					</tbody>
+				</table>
+			</div>
+		</div>
 		<?php
 	}
 
@@ -1049,5 +1511,64 @@ class Admin_Settings {
 		Background_Processor::schedule_event( $order_id );
 
 		wp_send_json_success();
+	}
+
+	/**
+	 * AJAX: Query Meta Dataset / Pixel Metadata via Graph API v21.0.
+	 */
+	public static function ajax_check_dataset_health() {
+		check_ajax_referer( 'wfbt_admin_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'Permission denied.', 'wfbt-server-side' ) );
+		}
+
+		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
+		$access_token = get_option( 'wfbt_access_token', '' );
+
+		if ( empty( $pixel_id ) || empty( $access_token ) ) {
+			wp_send_json_error( __( 'Please configure both a Pixel ID and a CAPI Access Token in the Configuration tab.', 'wfbt-server-side' ) );
+		}
+
+		$url = sprintf(
+			'https://graph.facebook.com/v21.0/%s?fields=id,name,is_unavailable,last_fired_time&access_token=%s',
+			rawurlencode( $pixel_id ),
+			rawurlencode( $access_token )
+		);
+
+		$response = wp_remote_get( $url, array(
+			'timeout' => 15,
+			'headers' => array( 'Accept' => 'application/json' ),
+		) );
+
+		if ( is_wp_error( $response ) ) {
+			wp_send_json_error( $response->get_error_message() );
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$body_raw    = wp_remote_retrieve_body( $response );
+		$body        = json_decode( $body_raw, true );
+
+		if ( 200 === $status_code && is_array( $body ) ) {
+			$last_fired_str = __( 'No recent event recorded yet', 'wfbt-server-side' );
+			if ( ! empty( $body['last_fired_time'] ) ) {
+				$last_fired_str = date_i18n( 'd M Y @ H:i:s', (int) $body['last_fired_time'] );
+			}
+
+			wp_send_json_success( array(
+				'name'            => isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '',
+				'id'              => isset( $body['id'] ) ? sanitize_text_field( $body['id'] ) : $pixel_id,
+				'is_unavailable'  => ! empty( $body['is_unavailable'] ),
+				'last_fired_time' => $last_fired_str,
+			) );
+		}
+
+		// Handle write-only token permission notices gracefully
+		$notice = isset( $body['error']['message'] ) ? $body['error']['message'] : __( 'Unable to query Meta Graph API.', 'wfbt-server-side' );
+		if ( isset( $body['error']['code'] ) && 200 === (int) $body['error']['code'] ) {
+			$notice = __( 'Your CAPI Access Token is strictly scoped to event uploads (write-only Conversions API). Meta restricts reading Dataset metadata with write-only tokens for security reasons. Your Purchase events will still transmit properly to CAPI.', 'wfbt-server-side' );
+		}
+
+		wp_send_json_error( $notice );
 	}
 }
