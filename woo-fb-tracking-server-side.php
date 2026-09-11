@@ -1,9 +1,9 @@
 <?php
 /**
  * Plugin Name: Woo FB Tracking Server-Side
- * Plugin URI:  https://github.com/
- * Description: WooCommerce plugin to send "Purchase" events to the Meta Conversions API (CAPI) server-side asynchronously.
- * Version:     1.0.0
+ * Plugin URI:  https://github.com/SOYOO974/woo-meta-tracking-server-side/
+ * Description: WooCommerce plugin for Hybrid Native tracking (Meta Browser Pixel + Conversions API CAPI v21.0) with Concord GDPR consent and HPOS compatibility.
+ * Version:     2.0.0
  * Author:      SOYOO
  * Author URI:  https://soyoo.re
  * Text Domain: wfbt-server-side
@@ -17,10 +17,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'WFBT_VERSION', '1.0.0' );
+define( 'WFBT_VERSION', '2.0.0' );
 define( 'WFBT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WFBT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WFBT_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
+
+// Initialize the Plugin Update Checker for GitHub releases
+require_once WFBT_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$wfbt_update_checker = PucFactory::buildUpdateChecker(
+	'https://github.com/SOYOO974/woo-meta-tracking-server-side/',
+	__FILE__,
+	'woo-meta-tracking-server-side'
+);
+
+// Set the branch that contains the stable release.
+$wfbt_update_checker->setBranch( 'main' );
+$wfbt_update_checker->getVcsApi()->enableReleaseAssets();
+
+/**
+ * Declare WooCommerce High-Performance Order Storage (HPOS) compatibility.
+ */
+add_action( 'before_woocommerce_init', function() {
+	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+	}
+} );
 
 /**
  * Initialize the plugin when WooCommerce and its Action Scheduler are loaded.
@@ -34,12 +57,16 @@ function wfbt_init_plugin() {
 		return;
 	}
 
-	// Include core classes.
+	// Include core and frontend classes.
 	require_once WFBT_PLUGIN_DIR . 'includes/class-wfbt-core.php';
 	require_once WFBT_PLUGIN_DIR . 'includes/class-wfbt-logger.php';
 	require_once WFBT_PLUGIN_DIR . 'includes/class-wfbt-background-processor.php';
 	require_once WFBT_PLUGIN_DIR . 'includes/class-wfbt-meta-api.php';
 	require_once WFBT_PLUGIN_DIR . 'includes/class-wfbt-admin-settings.php';
+	require_once WFBT_PLUGIN_DIR . 'public/class-wfbt-public.php';
+
+	// Boot up frontend pixel and cookie capture.
+	\WFBT\Public_Handler::init();
 
 	// Boot up the core class.
 	\WFBT\Core::instance();
