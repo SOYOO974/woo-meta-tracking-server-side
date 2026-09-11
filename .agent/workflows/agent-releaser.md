@@ -13,23 +13,25 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
 3. Rédiger automatiquement un **changelog** récapitulatif clair et concis.
 4. Mettre à jour la ligne `Version: x.x.x` et `define( 'WFBT_VERSION', 'x.x.x' );` dans `woo-fb-tracking-server-side.php`.
 5. Mettre à jour `Stable tag: x.x.x` et ajouter les détails de la version générée dans la section `== Changelog ==` du fichier `readme.txt`.
+6. **Contrôle de sécurité strict obligatoire (Zéro Info Sensible)** :
+   - Vérifier qu'aucune information sensible (jeton Meta `EAAB...`, token GitHub `ghp_...`, mot de passe, clé privée ou URL confidentielle) n'est présente dans les fichiers modifiés ou le code source via `git diff` ou recherche de motifs sensibles.
 
 // turbo
-6. Ajouter les fichiers modifiés (`git add woo-fb-tracking-server-side.php readme.txt AGENTS.md`)
+7. Ajouter les fichiers modifiés (`git add woo-fb-tracking-server-side.php readme.txt AGENTS.md .agent/workflows/agent-releaser.md`)
 
 // turbo
-7. Créer le commit (`git commit -m "Bump version to v[VERSION]"`)
+8. Créer le commit (`git commit -m "Bump version to v[VERSION]"`)
 
 // turbo
-8. Pousser le commit vers la branche principale (`git push origin main`)
+9. Pousser le commit vers la branche principale (`git push origin main`)
 
 // turbo
-9. Créer un tag Git pour la release (`git tag -a v[VERSION] -m "Release v[VERSION]"`)
+10. Créer un tag Git pour la release (`git tag -a v[VERSION] -m "Release v[VERSION]"`)
 
 // turbo
-10. Pousser le tag vers GitHub (`git push origin v[VERSION]`)
+11. Pousser le tag vers GitHub (`git push origin v[VERSION]`)
 
-11. Créer le package zip de release `woo-meta-tracking-server-side.zip` :
+12. Créer le package zip de release `woo-meta-tracking-server-side.zip` :
     ```powershell
     $tempDir = Join-Path $env:TEMP "woo-meta-tracking-server-side"
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
@@ -40,7 +42,7 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
     ```
 
-12. Publier la release sur GitHub avec l'outil GitHub CLI (`gh`) :
+13. Publier la release sur GitHub avec l'outil GitHub CLI (`gh`) :
     ```bash
     gh release create v[VERSION] "woo-meta-tracking-server-side.zip" --title "v[VERSION]" --notes "[CHANGELOG]"
     ```

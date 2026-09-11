@@ -162,6 +162,12 @@ Sur la page `is_order_received_page()` :
 - **Traductions françaises intégrées** : Les fichiers `languages/wfbt-server-side-fr_FR.po` et le binaire compilé `languages/wfbt-server-side-fr_FR.mo` (généré via `wp i18n make-mo languages/`) assurent l'affichage direct en français sur les sites configurés en langue française.
 - **Loco Translate natif** : L'extension Loco Translate reconnaît immédiatement le text domain `wfbt-server-side` et le modèle `.pot` pour synchroniser ou ajouter d'autres langues en un clic.
 
+### E. Visibilité Publique du Dépôt & Contrôle Strict Zéro Donnée Sensible
+- **Dépôt public pour les mises à jour sans friction** : Le dépôt GitHub `SOYOO974/woo-meta-tracking-server-side` est **public** (identique à `woo-google-ads-tracking-server-side`). Cette visibilité est indispensable pour permettre à `plugin-update-checker` (PUC) sur les sites WordPress d'interroger l'API GitHub (`/releases/latest`) et de télécharger les archives de mise à jour sans nécessiter de Personal Access Token (PAT) ni d'authentification.
+- **Règle absolue de sécurité (Zéro Info Sensible)** :
+  - **Interdiction formelle de committer des secrets** : Ne jamais inclure de tokens d'accès Meta réels (`EAAB...`), de tokens GitHub (`ghp_...`, `gho_...`), de mots de passe, de clés API privées, d'adresses d'environnements confidentiels ou de données clients dans le code ou l'historique Git.
+  - **Vérification systématique avant chaque commit et release** : Vérifier impérativement via `git diff` ou recherche textuelle qu'aucune donnée sensible n'a été insérée par inadvertance (ex: lors de tests locaux de l'API Meta).
+
 ---
 
 ## 6. 🚀 Procédure de Release & Déploiement
