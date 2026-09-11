@@ -37,7 +37,10 @@ woo-fb-tracking-server-side/
 │   └── class-wfbt-logger.php               # Wrapper WC_Logger ('wfbt-server-side')
 ├── public/
 │   └── class-wfbt-public.php               # Injection Pixel fbq, capture fbclid/fbp/fbc, RGPD Concord
-└── languages/                              # Fichiers de traduction i18n
+└── languages/                              # Fichiers de traduction i18n (Loco Translate & WP standard)
+    ├── wfbt-server-side.pot                # Modèle maître de traduction officiel (.pot généré par WP-CLI)
+    ├── wfbt-server-side-fr_FR.po           # Fichier source de traduction française (fr_FR)
+    └── wfbt-server-side-fr_FR.mo           # Binaire compilé chargé nativement par WordPress
 ```
 
 ### Détail des Composants Clés
@@ -151,6 +154,12 @@ Sur la page `is_order_received_page()` :
 - La Réunion utilise l'indicatif international `+262`.
 - Les numéros locaux saisis par les clients débutent fréquemment par `0692`, `0693` (mobiles) ou `0262` (fixes). Si ces numéros étaient préfixés par l'indicatif métropolitain `+33` (erreur courante de plugins anglophones), Meta serait incapable de les faire correspondre aux profils des acheteurs.
 - L'algorithme dédié dans `Meta_Api::format_phone_e164` garantit un formatage propre `262692...` avant hachage SHA-256.
+
+### D. Internationalisation (i18n) & Compatibilité Loco Translate
+- **Textes sources en anglais par défaut** : Tous les textes utilisateur du code PHP et JS sont rédigés en anglais et enveloppés dans les fonctions standards WordPress (`__( '...', 'wfbt-server-side' )`, `esc_html__()`, etc.).
+- **Modèle maître officiel (`languages/wfbt-server-side.pot`)** : Généré via la commande officielle `wp i18n make-pot . languages/wfbt-server-side.pot --slug=wfbt-server-side --domain=wfbt-server-side`.
+- **Traductions françaises intégrées** : Les fichiers `languages/wfbt-server-side-fr_FR.po` et le binaire compilé `languages/wfbt-server-side-fr_FR.mo` (généré via `wp i18n make-mo languages/`) assurent l'affichage direct en français sur les sites configurés en langue française.
+- **Loco Translate natif** : L'extension Loco Translate reconnaît immédiatement le text domain `wfbt-server-side` et le modèle `.pot` pour synchroniser ou ajouter d'autres langues en un clic.
 
 ---
 

@@ -359,13 +359,16 @@ class Meta_Api {
 		$alert_email   = get_option( 'wfbt_alert_email', '' );
 
 		if ( 'yes' === $enable_alerts && is_email( $alert_email ) ) {
-			$subject  = "Meta CAPI Error for Order #{$order_id}";
+			/* translators: %d: order ID */
+			$subject  = sprintf( __( 'Meta CAPI Error for Order #%d', 'wfbt-server-side' ), $order_id );
 			$edit_url = admin_url( 'post.php?post=' . $order_id . '&action=edit' );
-			$message  = "Hello,\n\n";
-			$message .= "The Meta Conversions API request failed for WooCommerce Order #{$order_id}.\n\n";
-			$message .= "Error Details:\n{$error}\n\n";
-			$message .= "View Order: {$edit_url}\n\n";
-			$message .= "Regards,\nWoo FB Tracking Server-Side";
+			$message  = sprintf(
+				/* translators: 1: order ID, 2: error details, 3: admin edit URL */
+				__( "Hello,\n\nThe Meta Conversions API request failed for WooCommerce Order #%1\$d.\n\nError Details:\n%2\$s\n\nView Order: %3\$s\n\nRegards,\nWoo FB Tracking Server-Side", 'wfbt-server-side' ),
+				$order_id,
+				$error,
+				$edit_url
+			);
 
 			wp_mail( $alert_email, $subject, $message );
 		}
