@@ -1,17 +1,15 @@
-# Copyright (C) 2026 SOYOO
-# This file is distributed under the same license as the Woo FB Tracking Server-Side plugin.
 msgid ""
 msgstr ""
 "Project-Id-Version: Woo FB Tracking Server-Side 2.0.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/wfbt-server-side\n"
 "Last-Translator: SOYOO <contact@soyoo.re>\n"
 "Language-Team: French <fr@example.com>\n"
-"Language: fr_FR\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "POT-Creation-Date: 2026-09-11T06:41:45+00:00\n"
 "PO-Revision-Date: 2026-09-11 10:45+0400\n"
+"Language: fr_FR\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: wfbt-server-side\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
@@ -54,7 +52,7 @@ msgid "Testing..."
 msgstr "Test en cours..."
 
 #: includes/class-wfbt-admin-settings.php:70
-#: includes/class-wfbt-admin-settings.php:311
+#: includes/class-wfbt-admin-settings.php:313
 msgid "Test API Connection (CAPI v21.0)"
 msgstr "Tester la connexion API (CAPI v21.0)"
 
@@ -79,7 +77,7 @@ msgid "Queued!"
 msgstr "En file d'attente !"
 
 #: includes/class-wfbt-admin-settings.php:76
-#: includes/class-wfbt-admin-settings.php:403
+#: includes/class-wfbt-admin-settings.php:405
 msgid "Resend"
 msgstr "Renvoyer"
 
@@ -104,16 +102,16 @@ msgid "High-performance hybrid architecture (Browser fbq + Server CAPI deduplica
 msgstr "Architecture hybride haute performance (Navigateur fbq + Serveur CAPI dédupliqué), 100% conforme RGPD (Concord) et compatible WooCommerce HPOS."
 
 #: includes/class-wfbt-admin-settings.php:148
+#: includes/class-wfbt-admin-settings.php:471
+#: includes/class-wfbt-admin-settings.php:505
+#: includes/class-wfbt-admin-settings.php:560
 msgid "Configuration"
 msgstr "Configuration"
 
 #: includes/class-wfbt-admin-settings.php:149
+#: includes/class-wfbt-admin-settings.php:569
 msgid "Diagnostics & Orders"
 msgstr "Diagnostics & Commandes"
-
-#: includes/class-wfbt-admin-settings.php:150
-msgid "Guide & Best Practices"
-msgstr "Guide & Bonnes Pratiques"
 
 #: includes/class-wfbt-admin-settings.php:184
 msgid "1. Meta API & Pixel Settings"
@@ -183,179 +181,131 @@ msgstr "Préfixe ou nom de cookie utilisé par votre bannière (valeur par défa
 msgid "CAPI action when consent is refused"
 msgstr "Action CAPI en cas de refus du consentement"
 
-#: includes/class-wfbt-admin-settings.php:246
-msgid "Cancel CAPI request (Recommended CNIL / 100% GDPR compliant)"
-msgstr "Annuler l'envoi CAPI (Recommandé CNIL / 100% conforme RGPD)"
-
-#: includes/class-wfbt-admin-settings.php:250
-msgid "Send anonymized request (No PII, no _fbp/_fbc cookies, no IP/User-Agent)"
-msgstr "Transmission anonymisée (Sans PII, sans cookies _fbp/_fbc, sans IP/User-Agent)"
-
-#: includes/class-wfbt-admin-settings.php:259
+#: includes/class-wfbt-admin-settings.php:261
 msgid "3. Triggering & Order Statuses (Action Scheduler)"
 msgstr "3. Déclenchement & Statuts de Commande (Action Scheduler)"
 
-#: includes/class-wfbt-admin-settings.php:262
+#: includes/class-wfbt-admin-settings.php:264
 msgid "CAPI trigger order statuses"
 msgstr "Statuts déclencheurs CAPI"
 
-#: includes/class-wfbt-admin-settings.php:278
+#: includes/class-wfbt-admin-settings.php:280
 msgid "Order statuses that trigger the asynchronous Purchase event to Meta CAPI (defaults: Processing and Completed)."
 msgstr "Statuts de commande qui déclenchent l'envoi asynchrone du Purchase vers Meta CAPI (par défaut : En cours et Terminé)."
 
-#: includes/class-wfbt-admin-settings.php:282
+#: includes/class-wfbt-admin-settings.php:284
 msgid "Email Alerts on Failure"
 msgstr "Alertes e-mail en cas d'erreur"
 
-#: includes/class-wfbt-admin-settings.php:286
+#: includes/class-wfbt-admin-settings.php:288
 msgid "Send an email if a CAPI request fails."
 msgstr "Envoyer un e-mail si une requête CAPI échoue."
 
-#: includes/class-wfbt-admin-settings.php:291
+#: includes/class-wfbt-admin-settings.php:293
 msgid "Alert Email Address"
 msgstr "Adresse e-mail d'alerte"
 
-#: includes/class-wfbt-admin-settings.php:298
+#: includes/class-wfbt-admin-settings.php:300
 msgid "Save Changes"
 msgstr "Enregistrer les modifications"
 
-#: includes/class-wfbt-admin-settings.php:309
+#: includes/class-wfbt-admin-settings.php:311
 msgid "Meta CAPI Connection Test (v21.0)"
 msgstr "Test de Connexion Meta CAPI (v21.0)"
 
-#: includes/class-wfbt-admin-settings.php:310
+#: includes/class-wfbt-admin-settings.php:312
 msgid "Sends an immediate dummy Purchase test event to Meta Graph API using your configured Test Event Code."
 msgstr "Envoie immédiatement un événement Purchase de test fictif vers Meta Graph API avec votre Test Event Code configuré."
 
-#: includes/class-wfbt-admin-settings.php:315
+#: includes/class-wfbt-admin-settings.php:317
 msgid "Last 20 WooCommerce Orders (CAPI & Cookies Audit)"
 msgstr "20 Dernières Commandes WooCommerce (Audit CAPI & Cookies)"
 
-#: includes/class-wfbt-admin-settings.php:317
+#: includes/class-wfbt-admin-settings.php:319
 msgid "Native HPOS inspection of advertising identifiers (_fbp, _fbc), Concord consent state, and CAPI transmission status."
 msgstr "Contrôle HPOS natif des identifiants publicitaires (_fbp, _fbc), du statut de consentement Concord et de l'état de transmission CAPI."
 
-#: includes/class-wfbt-admin-settings.php:322
+#: includes/class-wfbt-admin-settings.php:324
 msgid "Order"
 msgstr "Commande"
 
-#: includes/class-wfbt-admin-settings.php:323
+#: includes/class-wfbt-admin-settings.php:325
 msgid "Date"
 msgstr "Date"
 
-#: includes/class-wfbt-admin-settings.php:324
+#: includes/class-wfbt-admin-settings.php:326
 msgid "Total"
 msgstr "Total"
 
-#: includes/class-wfbt-admin-settings.php:325
+#: includes/class-wfbt-admin-settings.php:327
 msgid "Meta CAPI Status"
 msgstr "Statut CAPI"
 
-#: includes/class-wfbt-admin-settings.php:326
+#: includes/class-wfbt-admin-settings.php:328
 msgid "_fbp Cookie"
 msgstr "Cookie _fbp"
 
-#: includes/class-wfbt-admin-settings.php:327
+#: includes/class-wfbt-admin-settings.php:329
 msgid "_fbc Cookie"
 msgstr "Cookie _fbc"
 
-#: includes/class-wfbt-admin-settings.php:328
+#: includes/class-wfbt-admin-settings.php:330
 msgid "Concord Consent"
 msgstr "Consentement Concord"
 
-#: includes/class-wfbt-admin-settings.php:329
+#: includes/class-wfbt-admin-settings.php:331
 msgid "Actions"
 msgstr "Actions"
 
-#: includes/class-wfbt-admin-settings.php:341
+#: includes/class-wfbt-admin-settings.php:343
 msgid "No orders found."
 msgstr "Aucune commande trouvée."
 
-#: includes/class-wfbt-admin-settings.php:357
+#: includes/class-wfbt-admin-settings.php:359
 msgid "Success"
 msgstr "Succès"
 
-#: includes/class-wfbt-admin-settings.php:362
+#: includes/class-wfbt-admin-settings.php:364
 msgid "Failed"
 msgstr "Échec"
 
-#: includes/class-wfbt-admin-settings.php:369
+#: includes/class-wfbt-admin-settings.php:371
 msgid "Pending"
 msgstr "En attente"
 
-#: includes/class-wfbt-admin-settings.php:374
-#: includes/class-wfbt-admin-settings.php:381
+#: includes/class-wfbt-admin-settings.php:376
+#: includes/class-wfbt-admin-settings.php:383
 msgid "Yes"
 msgstr "Oui"
 
-#: includes/class-wfbt-admin-settings.php:376
-#: includes/class-wfbt-admin-settings.php:383
-#: includes/class-wfbt-admin-settings.php:392
+#: includes/class-wfbt-admin-settings.php:378
+#: includes/class-wfbt-admin-settings.php:385
+#: includes/class-wfbt-admin-settings.php:394
 msgid "Not detected"
 msgstr "Non détecté"
 
-#: includes/class-wfbt-admin-settings.php:388
+#: includes/class-wfbt-admin-settings.php:390
 msgid "Granted"
 msgstr "Accordé"
 
-#: includes/class-wfbt-admin-settings.php:390
+#: includes/class-wfbt-admin-settings.php:392
 msgid "Denied"
 msgstr "Refusé"
 
-#: includes/class-wfbt-admin-settings.php:419
-msgid "Hybrid Architecture & Meta Best Practices"
-msgstr "Architecture Hybride & Bonnes Pratiques Meta"
-
-#: includes/class-wfbt-admin-settings.php:420
-msgid "This plugin combines the best of both worlds for maximum attribution precision and resilience against ad blockers (AdBlockers, iOS Safari ITP):"
-msgstr "Ce plugin combine le meilleur des deux mondes pour une précision d'attribution et une résilience maximales face aux bloqueurs de publicité (AdBlockers, ITP iOS) :"
-
-#: includes/class-wfbt-admin-settings.php:423
-msgid "How does deduplication work?"
-msgstr "Comment fonctionne la déduplication ?"
-
-#: includes/class-wfbt-admin-settings.php:424
-msgid "On the order confirmation page, the Browser Pixel fires Purchase with a unique identifier (eventID: order_XXX). Simultaneously, the CAPI server sends this exact same event asynchronously with the same event_id. Meta analyzes both signals and automatically deduplicates, counting only one conversion while combining advanced matching parameters."
-msgstr "Sur la page de confirmation de commande, le Pixel navigateur déclenche Purchase avec un identifiant unique (eventID : order_XXX). Simultanément, le serveur CAPI envoie ce même événement de façon asynchrone avec le même event_id. Meta analyse les deux signaux et déduplique automatiquement en ne conservant qu'un seul événement pour les métriques de vente, tout en combinant les correspondances avancées."
-
-#: includes/class-wfbt-admin-settings.php:427
-msgid "Recommended Setup Steps:"
-msgstr "Étapes de configuration recommandée :"
-
-#: includes/class-wfbt-admin-settings.php:429
-msgid "Enter your Pixel ID and your Conversions API Access Token (Graph API v21.0)."
-msgstr "Renseignez votre Pixel ID et votre Jeton d'accès Conversions API (Graph API v21.0)."
-
-#: includes/class-wfbt-admin-settings.php:430
-msgid "Enable the Browser Pixel to track upper-funnel events (PageView, ViewContent, AddToCart, InitiateCheckout)."
-msgstr "Activez le Pixel Navigateur pour capter le haut de tunnel (PageView, ViewContent, AddToCart, InitiateCheckout)."
-
-#: includes/class-wfbt-admin-settings.php:431
-msgid "If you use Concord Cookie Banner, enable GDPR consent condition to respect visitor choices."
-msgstr "Si vous utilisez la bannière Concord Cookie Banner, activez l'asservissement RGPD afin de respecter les choix des visiteurs."
-
-#: includes/class-wfbt-admin-settings.php:432
-msgid "Enter your Test Event Code from Meta Events Manager > Test events tab and click \"Test API Connection\" in the Diagnostics tab."
-msgstr "Entrez votre Test Event Code depuis l'onglet « Tester les événements » de Meta Events Manager et cliquez sur « Tester la connexion API » dans l'onglet Diagnostics."
-
-#: includes/class-wfbt-admin-settings.php:433
-msgid "Once verified, remove the Test Event Code to switch to live production mode."
-msgstr "Une fois validé, retirez le Test Event Code pour passer en production réelle."
-
-#: includes/class-wfbt-admin-settings.php:446
-#: includes/class-wfbt-admin-settings.php:516
+#: includes/class-wfbt-admin-settings.php:621
+#: includes/class-wfbt-admin-settings.php:691
 msgid "Permission denied."
 msgstr "Permission refusée."
 
-#: includes/class-wfbt-admin-settings.php:454
+#: includes/class-wfbt-admin-settings.php:629
 msgid "Meta Pixel ID or Access Token is missing in settings."
 msgstr "Pixel ID ou Jeton d'accès manquant dans la configuration."
 
-#: includes/class-wfbt-admin-settings.php:521
+#: includes/class-wfbt-admin-settings.php:696
 msgid "Invalid order ID."
 msgstr "ID de commande invalide."
 
-#: includes/class-wfbt-admin-settings.php:526
+#: includes/class-wfbt-admin-settings.php:701
 msgid "Order not found."
 msgstr "Commande introuvable."
 
@@ -400,3 +350,220 @@ msgstr "Réglages"
 #: woo-fb-tracking-server-side.php:92
 msgid "Woo FB Tracking Server-Side requires WooCommerce to be installed and active."
 msgstr "Woo FB Tracking Server-Side nécessite que WooCommerce soit installé et activé."
+
+#: includes/class-wfbt-admin-settings.php:150
+msgid "Setup Guide & Instructions"
+msgstr "Guide de configuration & Tutoriel"
+
+#: includes/class-wfbt-admin-settings.php:246
+msgid "Send anonymized request (Default & Recommended - No PII, no _fbp/_fbc, no IP/User-Agent)"
+msgstr "Envoyer une requête anonymisée (Par défaut & Recommandé — Sans PII, sans _fbp/_fbc, sans IP/User-Agent)"
+
+#: includes/class-wfbt-admin-settings.php:247
+msgid "Safely sends order value, currency, contents, and eventID for statistical aggregation without customer personal data."
+msgstr "Transmet en toute sécurité le montant, la devise, les articles commandés et l'eventID pour l'agrégation statistique sans aucune donnée personnelle du client."
+
+#: includes/class-wfbt-admin-settings.php:251
+msgid "Cancel CAPI request completely (Strict CNIL)"
+msgstr "Annuler totalement la requête CAPI (Strict CNIL)"
+
+#: includes/class-wfbt-admin-settings.php:252
+msgid "Completely cancels and ignores CAPI transmission if marketing consent is refused."
+msgstr "Annule et ignore totalement la transmission CAPI si le consentement marketing est refusé."
+
+#: includes/class-wfbt-admin-settings.php:424
+msgid "Step-by-Step Meta Hybrid Tracking Setup Guide"
+msgstr "Guide pas à pas de configuration du suivi hybride Meta"
+
+#: includes/class-wfbt-admin-settings.php:427
+msgid "Follow these 5 clear steps to configure and verify your Meta tracking. No guesswork required: every step includes direct links and exact instructions on what to copy and where to paste."
+msgstr "Suivez ces 5 étapes claires pour configurer et vérifier votre suivi Meta. Zéro devinette : chaque étape contient les liens directs et les instructions exactes sur quoi copier et où coller."
+
+#: includes/class-wfbt-admin-settings.php:432
+msgid "Open Meta Events Manager"
+msgstr "Ouvrir le Gestionnaire d'événements Meta"
+
+#: includes/class-wfbt-admin-settings.php:436
+msgid "Meta System Users (Business Settings)"
+msgstr "Utilisateurs système Meta (Paramètres d'entreprise)"
+
+#: includes/class-wfbt-admin-settings.php:440
+msgid "Meta Pixel Helper (Chrome Extension)"
+msgstr "Meta Pixel Helper (Extension Chrome)"
+
+#: includes/class-wfbt-admin-settings.php:449
+msgid "Find & Copy your Meta Pixel ID"
+msgstr "Trouver & Copier votre identifiant Pixel Meta"
+
+#. translators: %s: HTML link to Meta Events Manager
+#: includes/class-wfbt-admin-settings.php:456
+#, php-format
+msgid "Open the %s."
+msgstr "Ouvrez le %s."
+
+#: includes/class-wfbt-admin-settings.php:457
+#: includes/class-wfbt-admin-settings.php:550
+msgid "Meta Events Manager"
+msgstr "Gestionnaire d'événements Meta"
+
+#: includes/class-wfbt-admin-settings.php:461
+msgid "In the left sidebar, select your Business Portfolio, then click on \"Data Sources\" (Sources de données) and choose your Pixel or Dataset."
+msgstr "Dans la colonne de gauche, sélectionnez votre Compte d'entreprise, puis cliquez sur « Sources de données » et choisissez votre Pixel ou Dataset."
+
+#: includes/class-wfbt-admin-settings.php:462
+msgid "Click on the \"Settings\" (Paramètres) tab in the top horizontal menu."
+msgstr "Cliquez sur l'onglet « Paramètres » dans le menu horizontal supérieur."
+
+#: includes/class-wfbt-admin-settings.php:464
+msgid "Locate the \"Dataset ID\" or \"Pixel ID\" section (a 15-16 digit numeric ID, e.g. 123456789012345). Click on it to copy it to your clipboard."
+msgstr "Repérez la section « Identifiant de l'ensemble de données » ou « ID du Pixel » (un numéro à 15-16 chiffres, ex. 123456789012345). Cliquez dessus pour le copier dans votre presse-papiers."
+
+#. translators: %s: HTML link to plugin configuration tab
+#: includes/class-wfbt-admin-settings.php:470
+#, php-format
+msgid "Come back to this page, click on the %s tab above, paste the number into the \"Meta Pixel ID\" field, and click Save Changes."
+msgstr "Revenez sur cette page, cliquez sur l'onglet %s ci-dessus, collez le numéro dans le champ « ID du Pixel Meta », puis cliquez sur Enregistrer les modifications."
+
+#: includes/class-wfbt-admin-settings.php:482
+msgid "Generate your Conversions API (CAPI) Access Token"
+msgstr "Générer votre jeton d'accès Conversions API (CAPI)"
+
+#: includes/class-wfbt-admin-settings.php:485
+msgid "In Meta Events Manager, stay on the \"Settings\" (Paramètres) tab and scroll down to the \"Conversions API\" section."
+msgstr "Dans le Gestionnaire d'événements Meta, restez sur l'onglet « Paramètres » et descendez jusqu'à la section « API Conversions »."
+
+#: includes/class-wfbt-admin-settings.php:487
+msgid "Under \"Set up manually\" (Configurer manuellement), click the blue link \"Generate access token\" (Générer un jeton d'accès)."
+msgstr "Sous « Configurer manuellement », cliquez sur le lien bleu « Générer un jeton d'accès »."
+
+#: includes/class-wfbt-admin-settings.php:489
+msgid "Note on System User Token:"
+msgstr "Remarque sur le jeton Utilisateur système :"
+
+#. translators: %s: HTML link to Meta Business Settings
+#: includes/class-wfbt-admin-settings.php:493
+#, php-format
+msgid "If the \"Generate access token\" link is disabled or grayed out, navigate to %s, create or select an Admin System User, assign your Pixel asset with \"Manage Pixel\" permission, and generate a token with the \"ads_management\" permission."
+msgstr "Si le lien « Générer un jeton d'accès » est désactivé ou grisé, rendez-vous dans %s, créez ou sélectionnez un Utilisateur système administrateur, assignez l'actif Pixel avec l'autorisation « Gérer le Pixel », et générez un jeton avec la permission « ads_management »."
+
+#: includes/class-wfbt-admin-settings.php:494
+msgid "Meta Business Settings > System Users"
+msgstr "Paramètres d'entreprise Meta > Utilisateurs système"
+
+#: includes/class-wfbt-admin-settings.php:499
+msgid "Click on the generated token string to copy it (it is a long text beginning with \"EAA...\")."
+msgstr "Cliquez sur la chaîne du jeton généré pour la copier (il s'agit d'un long texte débutant par « EAA... »)."
+
+#. translators: %s: HTML link to plugin configuration tab
+#: includes/class-wfbt-admin-settings.php:504
+#, php-format
+msgid "Paste this token into the \"Conversions API Access Token\" field in the %s tab, and click Save Changes."
+msgstr "Collez ce jeton dans le champ « Jeton d'accès Conversions API » dans l'onglet %s, puis cliquez sur Enregistrer les modifications."
+
+#: includes/class-wfbt-admin-settings.php:516
+msgid "Configure GDPR Consent & Trigger Statuses"
+msgstr "Configurer le consentement RGPD & les statuts déclencheurs"
+
+#: includes/class-wfbt-admin-settings.php:520
+msgid "Enable Browser Pixel:"
+msgstr "Activer le Pixel Navigateur :"
+
+#: includes/class-wfbt-admin-settings.php:521
+msgid "Ensure this checkbox is checked. This enables client-side tracking for PageView, ViewContent (product page), AddToCart (AJAX), InitiateCheckout, and client-side Purchase."
+msgstr "Vérifiez que cette case est cochée. Elle active le suivi côté navigateur pour PageView, ViewContent (page produit), AddToCart (AJAX), InitiateCheckout et Purchase côté client."
+
+#: includes/class-wfbt-admin-settings.php:524
+msgid "Concord Cookie Banner integration:"
+msgstr "Intégration Concord Cookie Banner :"
+
+#: includes/class-wfbt-admin-settings.php:525
+msgid "Check \"Require marketing consent from Concord Cookie Banner\". The default cookie prefix is \"concord\". The plugin automatically listens to Concord consent acceptance in real-time without requiring a page refresh!"
+msgstr "Cochez « Exiger le consentement marketing de Concord Cookie Banner ». Le préfixe de cookie par défaut est « concord ». Le plugin écoute automatiquement l'acceptation du consentement Concord en temps réel sans nécessiter de rechargement de page !"
+
+#: includes/class-wfbt-admin-settings.php:528
+msgid "Action when consent is refused:"
+msgstr "Action en cas de refus du consentement :"
+
+#: includes/class-wfbt-admin-settings.php:529
+msgid "The default and recommended choice is \"Send anonymized request\". If an customer refuses marketing cookies, CAPI still transmits the order total, currency, purchased item IDs, and deduplication eventID, but strips all customer PII (email, phone, name, address), strips advertising cookies (_fbp, _fbc), and removes IP address / User Agent."
+msgstr "Le choix par défaut et recommandé est « Envoyer une requête anonymisée ». Si un client refuse les cookies marketing, CAPI transmet toujours le montant total, la devise, les identifiants d'articles et l'eventID de déduplication, mais supprime toutes les données personnelles du client (email, téléphone, nom, adresse), supprime les cookies publicitaires (_fbp, _fbc) et retire l'adresse IP / User Agent."
+
+#: includes/class-wfbt-admin-settings.php:532
+msgid "Trigger statuses:"
+msgstr "Statuts déclencheurs :"
+
+#: includes/class-wfbt-admin-settings.php:533
+msgid "By default, \"Processing\" (En cours) and \"Completed\" (Terminée) are enabled. The background Action Scheduler queues the CAPI event as soon as the order transitions into either of these statuses with 100% anti-duplicate safety."
+msgstr "Par défaut, « En cours » (Processing) et « Terminée » (Completed) sont activés. Le planificateur asynchrone Action Scheduler place l'événement CAPI en file d'attente dès que la commande bascule vers l'un de ces statuts, avec une sécurité anti-doublon à 100%."
+
+#: includes/class-wfbt-admin-settings.php:542
+msgid "Test the Connection in Real-Time (Test Event Code)"
+msgstr "Tester la connexion en temps réel (Code d'événement test)"
+
+#. translators: %s: HTML link to Meta Events Manager
+#: includes/class-wfbt-admin-settings.php:549
+#, php-format
+msgid "In %s, click on the \"Test events\" (Tester les événements) tab."
+msgstr "Dans le %s, cliquez sur l'onglet « Tester les événements »."
+
+#: includes/class-wfbt-admin-settings.php:554
+msgid "In the section \"Confirm your server events are set up correctly\" (Confirmer que les événements de votre serveur sont configurés correctement), copy the test code (e.g. TEST12345)."
+msgstr "Dans la section « Confirmer que les événements de votre serveur sont configurés correctement », copiez le code test (ex. TEST12345)."
+
+#. translators: %s: HTML link to Configuration tab
+#: includes/class-wfbt-admin-settings.php:559
+#, php-format
+msgid "Paste this code into the \"Test Event Code\" field in the %s tab and click Save Changes."
+msgstr "Collez ce code dans le champ « Code d'événement de test » dans l'onglet %s, puis cliquez sur Enregistrer les modifications."
+
+#. translators: %s: HTML link to Diagnostics tab
+#: includes/class-wfbt-admin-settings.php:568
+#, php-format
+msgid "Go to the %s tab and click the blue button \"Test API Connection (CAPI v21.0)\"."
+msgstr "Rendez-vous sur l'onglet %s et cliquez sur le bouton bleu « Tester la connexion API (CAPI v21.0) »."
+
+#: includes/class-wfbt-admin-settings.php:573
+msgid "Switch to your Meta Events Manager screen: you will see a test \"Purchase\" event appear in green within 2 seconds!"
+msgstr "Basculez sur l'écran de votre Gestionnaire d'événements Meta : vous verrez un événement test « Purchase » apparaître en vert sous 2 secondes !"
+
+#: includes/class-wfbt-admin-settings.php:576
+msgid "Crucial Step before going live:"
+msgstr "Étape cruciale avant le passage en production :"
+
+#: includes/class-wfbt-admin-settings.php:577
+msgid "Once you have confirmed the test event works, return to the Configuration tab, delete the Test Event Code, and click Save Changes. Leaving the test code in place would mark real production orders as test events in Meta!"
+msgstr "Une fois que vous avez confirmé la réception de l'événement test, revenez sur l'onglet Configuration, supprimez le Code d'événement de test et cliquez sur Enregistrer les modifications. Laisser le code test marquerait les vraies commandes de production comme des tests dans Meta !"
+
+#: includes/class-wfbt-admin-settings.php:587
+msgid "Verify Front-End Tracking & 100% Deduplication"
+msgstr "Vérifier le suivi navigateur & la déduplication parfaite à 100%"
+
+#. translators: %s: HTML link to Chrome Web Store Meta Pixel Helper
+#: includes/class-wfbt-admin-settings.php:594
+#, php-format
+msgid "Install the official %s extension in Google Chrome."
+msgstr "Installez l'extension officielle %s dans Google Chrome."
+
+#: includes/class-wfbt-admin-settings.php:595
+msgid "Meta Pixel Helper"
+msgstr "Meta Pixel Helper"
+
+#: includes/class-wfbt-admin-settings.php:599
+msgid "Open your store in an incognito window with a test click parameter in the URL: yourstore.com/?fbclid=TEST_SOYOO_CLICK_123"
+msgstr "Ouvrez votre boutique dans une fenêtre de navigation privée avec un paramètre de clic test dans l'URL : yourstore.com/?fbclid=TEST_SOYOO_CLICK_123"
+
+#: includes/class-wfbt-admin-settings.php:600
+msgid "Accept marketing cookies on your cookie banner: Pixel Helper will immediately detect the Pixel initialization and fire PageView without requiring a reload."
+msgstr "Acceptez les cookies marketing sur votre bandeau : Pixel Helper détectera immédiatement l'initialisation du Pixel et déclenchera PageView sans rechargement de page."
+
+#: includes/class-wfbt-admin-settings.php:601
+msgid "Visit a product: ViewContent fires. Add to cart: AddToCart fires. Proceed to checkout: InitiateCheckout fires."
+msgstr "Consultez un produit : ViewContent se déclenche. Ajoutez au panier : AddToCart se déclenche. Rendez-vous sur la commande : InitiateCheckout se déclenche."
+
+#: includes/class-wfbt-admin-settings.php:603
+msgid "Complete a test order. On the Order Received (Thank You) page, Pixel Helper will display the Purchase event with an eventID parameter (e.g. order_1234)."
+msgstr "Finalisez une commande de test. Sur la page Commande reçue (Thank You), Pixel Helper affichera l'événement Purchase avec un paramètre eventID (ex. order_1234)."
+
+#: includes/class-wfbt-admin-settings.php:606
+msgid "In Meta Events Manager, check your events: Meta receives both the Browser event (Pixel) and the Server event (CAPI) sharing the exact same eventID (\"order_1234\") and automatically merges them into a single deduplicated conversion with a green status icon."
+msgstr "Dans le Gestionnaire d'événements Meta, consultez vos événements : Meta reçoit à la fois l'événement Navigateur (Pixel) et l'événement Serveur (CAPI) partageant exactement le même eventID (« order_1234 ») et les fusionne automatiquement en une seule conversion dédupliquée avec une pastille verte."

@@ -3,7 +3,7 @@
  * Plugin Name: Woo FB Tracking Server-Side
  * Plugin URI:  https://github.com/SOYOO974/woo-meta-tracking-server-side/
  * Description: WooCommerce plugin for Hybrid Native tracking (Meta Browser Pixel + Conversions API CAPI v21.0) with Concord GDPR consent and HPOS compatibility.
- * Version:     2.0.0
+ * Version:     2.0.1
  * Author:      SOYOO
  * Author URI:  https://soyoo.re
  * Text Domain: wfbt-server-side
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'WFBT_VERSION', '2.0.0' );
+define( 'WFBT_VERSION', '2.0.1' );
 define( 'WFBT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WFBT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WFBT_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );

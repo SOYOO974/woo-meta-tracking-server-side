@@ -147,7 +147,7 @@ class Admin_Settings {
 			<h2 class="nav-tab-wrapper">
 				<a href="?page=wfbt-settings&tab=configuration" class="nav-tab <?php echo 'configuration' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Configuration', 'wfbt-server-side' ); ?></a>
 				<a href="?page=wfbt-settings&tab=diagnostics" class="nav-tab <?php echo 'diagnostics' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Diagnostics & Orders', 'wfbt-server-side' ); ?></a>
-				<a href="?page=wfbt-settings&tab=tutorial" class="nav-tab <?php echo 'tutorial' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Guide & Best Practices', 'wfbt-server-side' ); ?></a>
+				<a href="?page=wfbt-settings&tab=tutorial" class="nav-tab <?php echo 'tutorial' === $active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Setup Guide & Instructions', 'wfbt-server-side' ); ?></a>
 			</h2>
 			<div class="wfbt-settings-content" style="margin-top: 20px;">
 				<?php
@@ -171,7 +171,7 @@ class Admin_Settings {
 		$enable_pixel        = get_option( 'wfbt_enable_pixel', 'yes' );
 		$respect_consent     = get_option( 'wfbt_respect_consent', 'yes' );
 		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
-		$consent_action      = get_option( 'wfbt_consent_action', 'block' );
+		$consent_action      = get_option( 'wfbt_consent_action', 'anonymize' );
 		$trigger_statuses    = get_option( 'wfbt_trigger_statuses', array( 'processing', 'completed' ) );
 		if ( ! is_array( $trigger_statuses ) ) {
 			$trigger_statuses = array( 'processing', 'completed' );
@@ -241,13 +241,15 @@ class Admin_Settings {
 					<th scope="row"><?php esc_html_e( 'CAPI action when consent is refused', 'wfbt-server-side' ); ?></th>
 					<td>
 						<fieldset>
-							<label>
-								<input type="radio" name="wfbt_consent_action" value="block" <?php checked( $consent_action, 'block' ); ?> />
-								<strong><?php esc_html_e( 'Cancel CAPI request (Recommended CNIL / 100% GDPR compliant)', 'wfbt-server-side' ); ?></strong>
-							</label><br />
-							<label style="margin-top: 5px; display: inline-block;">
+							<label style="display: block; margin-bottom: 10px;">
 								<input type="radio" name="wfbt_consent_action" value="anonymize" <?php checked( $consent_action, 'anonymize' ); ?> />
-								<span><?php esc_html_e( 'Send anonymized request (No PII, no _fbp/_fbc cookies, no IP/User-Agent)', 'wfbt-server-side' ); ?></span>
+								<strong><?php esc_html_e( 'Send anonymized request (Default & Recommended - No PII, no _fbp/_fbc, no IP/User-Agent)', 'wfbt-server-side' ); ?></strong>
+								<p class="description" style="margin: 3px 0 0 24px;"><?php esc_html_e( 'Safely sends order value, currency, contents, and eventID for statistical aggregation without customer personal data.', 'wfbt-server-side' ); ?></p>
+							</label>
+							<label style="display: block;">
+								<input type="radio" name="wfbt_consent_action" value="block" <?php checked( $consent_action, 'block' ); ?> />
+								<span><?php esc_html_e( 'Cancel CAPI request completely (Strict CNIL)', 'wfbt-server-side' ); ?></span>
+								<p class="description" style="margin: 3px 0 0 24px;"><?php esc_html_e( 'Completely cancels and ignores CAPI transmission if marketing consent is refused.', 'wfbt-server-side' ); ?></p>
 							</label>
 						</fieldset>
 					</td>
@@ -411,27 +413,200 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Render Tutorial / Guide Tab.
+	 * Render Detailed Setup Guide & Instructions Tab.
 	 */
 	private static function render_tutorial_tab() {
 		?>
-		<div class="card" style="max-width: 850px; padding: 25px;">
-			<h3 style="margin-top: 0;"><?php esc_html_e( 'Hybrid Architecture & Meta Best Practices', 'wfbt-server-side' ); ?></h3>
-			<p><?php esc_html_e( 'This plugin combines the best of both worlds for maximum attribution precision and resilience against ad blockers (AdBlockers, iOS Safari ITP):', 'wfbt-server-side' ); ?></p>
-			
-			<div style="background: #f6f7f7; border-left: 4px solid #007cba; padding: 12px 16px; margin: 15px 0;">
-				<strong><?php esc_html_e( 'How does deduplication work?', 'wfbt-server-side' ); ?></strong><br />
-				<?php esc_html_e( 'On the order confirmation page, the Browser Pixel fires Purchase with a unique identifier (eventID: order_XXX). Simultaneously, the CAPI server sends this exact same event asynchronously with the same event_id. Meta analyzes both signals and automatically deduplicates, counting only one conversion while combining advanced matching parameters.', 'wfbt-server-side' ); ?>
+		<div style="max-width: 960px;">
+			<!-- Header Banner -->
+			<div style="background: #fff; border: 1px solid #ccd0d4; border-left: 4px solid #007cba; padding: 20px; border-radius: 4px; margin-bottom: 25px; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
+				<h2 style="margin-top: 0; font-size: 19px; color: #1d2327;">
+					<?php esc_html_e( 'Step-by-Step Meta Hybrid Tracking Setup Guide', 'wfbt-server-side' ); ?>
+				</h2>
+				<p style="font-size: 14px; line-height: 1.6; color: #50575e; margin-bottom: 12px;">
+					<?php esc_html_e( 'Follow these 5 clear steps to configure and verify your Meta tracking. No guesswork required: every step includes direct links and exact instructions on what to copy and where to paste.', 'wfbt-server-side' ); ?>
+				</p>
+				<div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 15px;">
+					<a href="https://adsmanager.facebook.com/events_manager2" target="_blank" rel="noopener noreferrer" class="button button-secondary">
+						<span class="dashicons dashicons-external" style="vertical-align: middle; margin-right: 4px; font-size: 17px;"></span>
+						<?php esc_html_e( 'Open Meta Events Manager', 'wfbt-server-side' ); ?>
+					</a>
+					<a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer" class="button button-secondary">
+						<span class="dashicons dashicons-admin-users" style="vertical-align: middle; margin-right: 4px; font-size: 17px;"></span>
+						<?php esc_html_e( 'Meta System Users (Business Settings)', 'wfbt-server-side' ); ?>
+					</a>
+					<a href="https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener noreferrer" class="button button-secondary">
+						<span class="dashicons dashicons-visibility" style="vertical-align: middle; margin-right: 4px; font-size: 17px;"></span>
+						<?php esc_html_e( 'Meta Pixel Helper (Chrome Extension)', 'wfbt-server-side' ); ?>
+					</a>
+				</div>
 			</div>
 
-			<h4><?php esc_html_e( 'Recommended Setup Steps:', 'wfbt-server-side' ); ?></h4>
-			<ol style="line-height: 1.8;">
-				<li><?php esc_html_e( 'Enter your Pixel ID and your Conversions API Access Token (Graph API v21.0).', 'wfbt-server-side' ); ?></li>
-				<li><?php esc_html_e( 'Enable the Browser Pixel to track upper-funnel events (PageView, ViewContent, AddToCart, InitiateCheckout).', 'wfbt-server-side' ); ?></li>
-				<li><?php esc_html_e( 'If you use Concord Cookie Banner, enable GDPR consent condition to respect visitor choices.', 'wfbt-server-side' ); ?></li>
-				<li><?php esc_html_e( 'Enter your Test Event Code from Meta Events Manager > Test events tab and click "Test API Connection" in the Diagnostics tab.', 'wfbt-server-side' ); ?></li>
-				<li><?php esc_html_e( 'Once verified, remove the Test Event Code to switch to live production mode.', 'wfbt-server-side' ); ?></li>
-			</ol>
+			<!-- Step 1 -->
+			<div class="card" style="padding: 22px; margin-bottom: 20px; border-radius: 4px;">
+				<h3 style="margin-top: 0; color: #007cba; display: flex; align-items: center; gap: 8px;">
+					<span style="background: #007cba; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">1</span>
+					<?php esc_html_e( 'Find & Copy your Meta Pixel ID', 'wfbt-server-side' ); ?>
+				</h3>
+				<ol style="line-height: 1.8; font-size: 13.5px; margin-left: 20px;">
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to Meta Events Manager */
+							__( 'Open the %s.', 'wfbt-server-side' ),
+							'<a href="https://adsmanager.facebook.com/events_manager2" target="_blank" rel="noopener noreferrer"><strong>' . esc_html__( 'Meta Events Manager', 'wfbt-server-side' ) . '</strong> <span class="dashicons dashicons-external" style="font-size: 14px;"></span></a>'
+						);
+						?>
+					</li>
+					<li><?php esc_html_e( 'In the left sidebar, select your Business Portfolio, then click on "Data Sources" (Sources de données) and choose your Pixel or Dataset.', 'wfbt-server-side' ); ?></li>
+					<li><?php esc_html_e( 'Click on the "Settings" (Paramètres) tab in the top horizontal menu.', 'wfbt-server-side' ); ?></li>
+					<li>
+						<?php esc_html_e( 'Locate the "Dataset ID" or "Pixel ID" section (a 15-16 digit numeric ID, e.g. 123456789012345). Click on it to copy it to your clipboard.', 'wfbt-server-side' ); ?>
+					</li>
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to plugin configuration tab */
+							__( 'Come back to this page, click on the %s tab above, paste the number into the "Meta Pixel ID" field, and click Save Changes.', 'wfbt-server-side' ),
+							'<a href="?page=wfbt-settings&tab=configuration"><strong>' . esc_html__( 'Configuration', 'wfbt-server-side' ) . '</strong></a>'
+						);
+						?>
+					</li>
+				</ol>
+			</div>
+
+			<!-- Step 2 -->
+			<div class="card" style="padding: 22px; margin-bottom: 20px; border-radius: 4px;">
+				<h3 style="margin-top: 0; color: #007cba; display: flex; align-items: center; gap: 8px;">
+					<span style="background: #007cba; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">2</span>
+					<?php esc_html_e( 'Generate your Conversions API (CAPI) Access Token', 'wfbt-server-side' ); ?>
+				</h3>
+				<ol style="line-height: 1.8; font-size: 13.5px; margin-left: 20px;">
+					<li><?php esc_html_e( 'In Meta Events Manager, stay on the "Settings" (Paramètres) tab and scroll down to the "Conversions API" section.', 'wfbt-server-side' ); ?></li>
+					<li>
+						<?php esc_html_e( 'Under "Set up manually" (Configurer manuellement), click the blue link "Generate access token" (Générer un jeton d\'accès).', 'wfbt-server-side' ); ?>
+						<div style="background: #f0f6fc; border-left: 3px solid #72aee6; padding: 8px 12px; margin: 8px 0; font-size: 12.5px;">
+							<strong><?php esc_html_e( 'Note on System User Token:', 'wfbt-server-side' ); ?></strong>
+							<?php
+							printf(
+								/* translators: %s: HTML link to Meta Business Settings */
+								__( 'If the "Generate access token" link is disabled or grayed out, navigate to %s, create or select an Admin System User, assign your Pixel asset with "Manage Pixel" permission, and generate a token with the "ads_management" permission.', 'wfbt-server-side' ),
+								'<a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener noreferrer"><strong>' . esc_html__( 'Meta Business Settings > System Users', 'wfbt-server-side' ) . '</strong></a>'
+							);
+							?>
+						</div>
+					</li>
+					<li><?php esc_html_e( 'Click on the generated token string to copy it (it is a long text beginning with "EAA...").', 'wfbt-server-side' ); ?></li>
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to plugin configuration tab */
+							__( 'Paste this token into the "Conversions API Access Token" field in the %s tab, and click Save Changes.', 'wfbt-server-side' ),
+							'<a href="?page=wfbt-settings&tab=configuration"><strong>' . esc_html__( 'Configuration', 'wfbt-server-side' ) . '</strong></a>'
+						);
+						?>
+					</li>
+				</ol>
+			</div>
+
+			<!-- Step 3 -->
+			<div class="card" style="padding: 22px; margin-bottom: 20px; border-radius: 4px;">
+				<h3 style="margin-top: 0; color: #007cba; display: flex; align-items: center; gap: 8px;">
+					<span style="background: #007cba; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">3</span>
+					<?php esc_html_e( 'Configure GDPR Consent & Trigger Statuses', 'wfbt-server-side' ); ?>
+				</h3>
+				<ul style="line-height: 1.8; font-size: 13.5px; margin-left: 20px; list-style-type: disc;">
+					<li>
+						<strong><?php esc_html_e( 'Enable Browser Pixel:', 'wfbt-server-side' ); ?></strong>
+						<?php esc_html_e( 'Ensure this checkbox is checked. This enables client-side tracking for PageView, ViewContent (product page), AddToCart (AJAX), InitiateCheckout, and client-side Purchase.', 'wfbt-server-side' ); ?>
+					</li>
+					<li>
+						<strong><?php esc_html_e( 'Concord Cookie Banner integration:', 'wfbt-server-side' ); ?></strong>
+						<?php esc_html_e( 'Check "Require marketing consent from Concord Cookie Banner". The default cookie prefix is "concord". The plugin automatically listens to Concord consent acceptance in real-time without requiring a page refresh!', 'wfbt-server-side' ); ?>
+					</li>
+					<li>
+						<strong><?php esc_html_e( 'Action when consent is refused:', 'wfbt-server-side' ); ?></strong>
+						<?php esc_html_e( 'The default and recommended choice is "Send anonymized request". If an customer refuses marketing cookies, CAPI still transmits the order total, currency, purchased item IDs, and deduplication eventID, but strips all customer PII (email, phone, name, address), strips advertising cookies (_fbp, _fbc), and removes IP address / User Agent.', 'wfbt-server-side' ); ?>
+					</li>
+					<li>
+						<strong><?php esc_html_e( 'Trigger statuses:', 'wfbt-server-side' ); ?></strong>
+						<?php esc_html_e( 'By default, "Processing" (En cours) and "Completed" (Terminée) are enabled. The background Action Scheduler queues the CAPI event as soon as the order transitions into either of these statuses with 100% anti-duplicate safety.', 'wfbt-server-side' ); ?>
+					</li>
+				</ul>
+			</div>
+
+			<!-- Step 4 -->
+			<div class="card" style="padding: 22px; margin-bottom: 20px; border-radius: 4px;">
+				<h3 style="margin-top: 0; color: #007cba; display: flex; align-items: center; gap: 8px;">
+					<span style="background: #007cba; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">4</span>
+					<?php esc_html_e( 'Test the Connection in Real-Time (Test Event Code)', 'wfbt-server-side' ); ?>
+				</h3>
+				<ol style="line-height: 1.8; font-size: 13.5px; margin-left: 20px;">
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to Meta Events Manager */
+							__( 'In %s, click on the "Test events" (Tester les événements) tab.', 'wfbt-server-side' ),
+							'<a href="https://adsmanager.facebook.com/events_manager2" target="_blank" rel="noopener noreferrer"><strong>' . esc_html__( 'Meta Events Manager', 'wfbt-server-side' ) . '</strong></a>'
+						);
+						?>
+					</li>
+					<li><?php esc_html_e( 'In the section "Confirm your server events are set up correctly" (Confirmer que les événements de votre serveur sont configurés correctement), copy the test code (e.g. TEST12345).', 'wfbt-server-side' ); ?></li>
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to Configuration tab */
+							__( 'Paste this code into the "Test Event Code" field in the %s tab and click Save Changes.', 'wfbt-server-side' ),
+							'<a href="?page=wfbt-settings&tab=configuration"><strong>' . esc_html__( 'Configuration', 'wfbt-server-side' ) . '</strong></a>'
+						);
+						?>
+					</li>
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to Diagnostics tab */
+							__( 'Go to the %s tab and click the blue button "Test API Connection (CAPI v21.0)".', 'wfbt-server-side' ),
+							'<a href="?page=wfbt-settings&tab=diagnostics"><strong>' . esc_html__( 'Diagnostics & Orders', 'wfbt-server-side' ) . '</strong></a>'
+						);
+						?>
+					</li>
+					<li><?php esc_html_e( 'Switch to your Meta Events Manager screen: you will see a test "Purchase" event appear in green within 2 seconds!', 'wfbt-server-side' ); ?></li>
+					<li>
+						<div style="background: #fff8e5; border-left: 4px solid #dba617; padding: 10px 14px; margin: 10px 0; font-size: 13px;">
+							<strong>⚠️ <?php esc_html_e( 'Crucial Step before going live:', 'wfbt-server-side' ); ?></strong><br />
+							<?php esc_html_e( 'Once you have confirmed the test event works, return to the Configuration tab, delete the Test Event Code, and click Save Changes. Leaving the test code in place would mark real production orders as test events in Meta!', 'wfbt-server-side' ); ?>
+						</div>
+					</li>
+				</ol>
+			</div>
+
+			<!-- Step 5 -->
+			<div class="card" style="padding: 22px; margin-bottom: 20px; border-radius: 4px;">
+				<h3 style="margin-top: 0; color: #007cba; display: flex; align-items: center; gap: 8px;">
+					<span style="background: #007cba; color: #fff; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold;">5</span>
+					<?php esc_html_e( 'Verify Front-End Tracking & 100% Deduplication', 'wfbt-server-side' ); ?>
+				</h3>
+				<ol style="line-height: 1.8; font-size: 13.5px; margin-left: 20px;">
+					<li>
+						<?php
+						printf(
+							/* translators: %s: HTML link to Chrome Web Store Meta Pixel Helper */
+							__( 'Install the official %s extension in Google Chrome.', 'wfbt-server-side' ),
+							'<a href="https://chromewebstore.google.com/detail/meta-pixel-helper/fdgfkebogiimcoedlicjlajpkdmockpc" target="_blank" rel="noopener noreferrer"><strong>' . esc_html__( 'Meta Pixel Helper', 'wfbt-server-side' ) . '</strong> <span class="dashicons dashicons-external" style="font-size: 14px;"></span></a>'
+						);
+						?>
+					</li>
+					<li><?php esc_html_e( 'Open your store in an incognito window with a test click parameter in the URL: yourstore.com/?fbclid=TEST_SOYOO_CLICK_123', 'wfbt-server-side' ); ?></li>
+					<li><?php esc_html_e( 'Accept marketing cookies on your cookie banner: Pixel Helper will immediately detect the Pixel initialization and fire PageView without requiring a reload.', 'wfbt-server-side' ); ?></li>
+					<li><?php esc_html_e( 'Visit a product: ViewContent fires. Add to cart: AddToCart fires. Proceed to checkout: InitiateCheckout fires.', 'wfbt-server-side' ); ?></li>
+					<li>
+						<?php esc_html_e( 'Complete a test order. On the Order Received (Thank You) page, Pixel Helper will display the Purchase event with an eventID parameter (e.g. order_1234).', 'wfbt-server-side' ); ?>
+					</li>
+					<li>
+						<?php esc_html_e( 'In Meta Events Manager, check your events: Meta receives both the Browser event (Pixel) and the Server event (CAPI) sharing the exact same eventID ("order_1234") and automatically merges them into a single deduplicated conversion with a green status icon.', 'wfbt-server-side' ); ?>
+					</li>
+				</ol>
+			</div>
 		</div>
 		<?php
 	}

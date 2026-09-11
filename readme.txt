@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 * **Pixel Navigateur (`fbq`)** : PageView, ViewContent, AddToCart (AJAX), InitiateCheckout et Purchase.
 * **Conversions API CAPI v21.0 (Server-Side)** : Envoi asynchrone sécurisé du Purchase via WooCommerce Action Scheduler, insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP iOS Safari).
 * **Déduplication parfaite à 100%** : Strict partage du même identifiant `eventID: 'order_' + order_id` entre le front-end et le serveur.
-* **Conformité RGPD Concord** : Respect du consentement marketing avec activation à chaud sans rechargement de page et blocage CNIL côté serveur.
+* **Conformité RGPD Concord** : Respect du consentement marketing avec activation à chaud sans rechargement de page et mode anonymisé par défaut en cas de refus.
 * **WooCommerce HPOS (High-Performance Order Storage)** : Déclaration de compatibilité et utilisation exclusive des méthodes CRUD de l'objet `$order`.
 * **Normalisation E.164 Réunion** : Conversion automatique des numéros réunionnais (`0692`, `0693`, `0262` -> `+262`) et français (`+33`) avant hachage SHA-256.
 * **Mises à jour automatiques** : Détection et installation transparente des nouvelles versions depuis les releases GitHub.
@@ -28,6 +28,11 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.1 =
+* **Tutoriel & Guide Pas à Pas** : Refonte intégrale du 3ème onglet avec 5 étapes numérotées, liens directs cliquables vers le Gestionnaire d'événements Meta, Paramètres d'entreprise et Pixel Helper.
+* **Consentement RGPD Anonymisé par Défaut** : L'option « Envoyer une requête anonymisée » est désormais sélectionnée par défaut lors de l'installation et en cas de refus des cookies marketing (transmission du montant, devise, IDs produits et eventID sans aucune PII, sans cookies publicitaires et sans IP/UA).
+* **Internationalisation (i18n)** : Traduction française intégrale synchronisée (.pot, .po, .mo compilé).
 
 = 2.0.0 =
 * **Architecture Hybride Native** : Intégration du Pixel Navigateur (`fbq`) combiné à la Meta Conversions API (Graph API v21.0).

@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.0)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.1)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -11,7 +11,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`.
 2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
 3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
-4. **Conformité RGPD stricte asservie à Concord Cookie Banner** : Respect absolu du consentement marketing, écoute dynamique des événements d'acceptation en direct (activation à chaud sans rechargement de page), et blocage CNIL ou anonymisation CAPI côté serveur.
+4. **Conformité RGPD stricte asservie à Concord Cookie Banner** : Respect absolu du consentement marketing, écoute dynamique des événements d'acceptation en direct (activation à chaud sans rechargement de page), et anonymisation CAPI sécurisée par défaut (`anonymize` : transmission valeur, devise, articles et eventID sans PII, sans _fbp/_fbc, sans IP/UA) ou annulation totale (`block`).
 5. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
 6. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
 7. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
@@ -64,8 +64,9 @@ woo-fb-tracking-server-side/
 - **[includes/class-wfbt-background-processor.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-background-processor.php)** :
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
-  - Formulaire de configuration avec bascules Pixel front, RGPD Concord, statuts déclencheurs personnalisés et alertes e-mail.
+  - Onglet Configuration : formulaire avec bascules Pixel front, RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics : test de connexion CAPI direct en AJAX (v21.0) et tableau d'audit des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
+  - Onglet Tutoriel & Guide de configuration : 5 étapes ultra-détaillées sans devinette avec liens directs vers le Gestionnaire d'événements Meta, les Utilisateurs système et Meta Pixel Helper.
 - **[public/class-wfbt-public.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/public/class-wfbt-public.php)** :
   - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (AJAX WooCommerce `added_to_cart`), `InitiateCheckout` et `Purchase`.
   - Intégration Concord Cookie Banner (fonction JS helper `wfbtHasMarketingConsent()`, écouteurs d'événements et polling léger).

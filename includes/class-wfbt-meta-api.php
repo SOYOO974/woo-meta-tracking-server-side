@@ -46,7 +46,7 @@ class Meta_Api {
 		$consent         = $order->get_meta( '_wfbt_consent' );
 
 		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
-			$consent_action = get_option( 'wfbt_consent_action', 'block' );
+			$consent_action = get_option( 'wfbt_consent_action', 'anonymize' );
 			if ( 'block' === $consent_action ) {
 				Logger::log( "Order #{$order_id}: Marketing consent was refused by customer. CAPI transmission cancelled (GDPR Concord compliance)." );
 				$order->update_meta_data( '_wfbt_capi_status', 'Ignored (Consent Denied)' );
@@ -56,7 +56,7 @@ class Meta_Api {
 			}
 		}
 
-		$is_anonymized = ( 'yes' === $respect_consent && 'denied' === $consent && 'anonymize' === get_option( 'wfbt_consent_action', 'block' ) );
+		$is_anonymized = ( 'yes' === $respect_consent && 'denied' === $consent && 'anonymize' === get_option( 'wfbt_consent_action', 'anonymize' ) );
 		$payload       = $this->build_payload( $order, $is_anonymized );
 		$url           = sprintf( 'https://graph.facebook.com/%s/%s/events', self::API_VERSION, rawurlencode( $pixel_id ) );
 
