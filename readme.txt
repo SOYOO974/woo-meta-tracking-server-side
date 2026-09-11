@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.4
+Stable tag: 2.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,11 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.5 =
+* **Résolution Définitive de l'Accès Administrateur (403 Permission Denied)** : Auto-réparation proactive des droits WooCommerce (`wfbt_ensure_admin_capabilities`) sur le hook `init`. Rétablit automatiquement les capacités `manage_woocommerce` et `view_woocommerce_reports` pour les administrateurs du site (`manage_options`) victimes de désynchronisation de rôles.
+* **Standardisation du Menu d'Administration (Priorité 20)** : Alignement strict sur les recommandations WooCommerce et la structure éprouvée du plugin Google Ads (`add_submenu_page( 'woocommerce', ... )` à priorité 20).
+* **Redirection de Sécurité & Sauvegarde Réglages** : Redirection transparente des anciens accès `/options-general.php` vers `/admin.php` et filtre `option_page_capability_wfbt_settings_group` garantissant la sauvegarde sans blocage pour tous les profils habilités.
 
 = 2.0.4 =
 * **Tableau de Bord Exécutif de Diagnostics** : Refonte totale du 2ème onglet « Diagnostics » avec grille d'état pré-vol (identifiants Meta, architecture HPOS/Action Scheduler, RGPD Concord, débogueur).

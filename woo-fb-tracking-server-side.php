@@ -3,7 +3,7 @@
  * Plugin Name: Woo FB Tracking Server-Side
  * Plugin URI:  https://github.com/SOYOO974/woo-meta-tracking-server-side/
  * Description: WooCommerce plugin for Hybrid Native tracking (Meta Browser Pixel + Conversions API CAPI v21.0) with Concord GDPR consent and HPOS compatibility.
- * Version:     2.0.4
+ * Version:     2.0.5
  * Author:      SOYOO
  * Author URI:  https://soyoo.re
  * Text Domain: wfbt-server-side
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'WFBT_VERSION', '2.0.4' );
+define( 'WFBT_VERSION', '2.0.5' );
 define( 'WFBT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WFBT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WFBT_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -74,14 +74,48 @@ function wfbt_init_plugin() {
 add_action( 'plugins_loaded', 'wfbt_init_plugin', 11 );
 
 /**
+ * Ensure administrators have the manage_woocommerce capability.
+ * Self-heals the common capability desynchronization where site administrators
+ * are missing WooCommerce management rights.
+ */
+function wfbt_ensure_admin_capabilities() {
+	if ( current_user_can( 'manage_options' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+		$admin_role = get_role( 'administrator' );
+		if ( $admin_role && ! $admin_role->has_cap( 'manage_woocommerce' ) ) {
+			$admin_role->add_cap( 'manage_woocommerce' );
+			$admin_role->add_cap( 'view_woocommerce_reports' );
+		}
+		$current_user = wp_get_current_user();
+		if ( $current_user && $current_user->exists() && ! $current_user->has_cap( 'manage_woocommerce' ) ) {
+			$current_user->add_cap( 'manage_woocommerce' );
+		}
+	}
+}
+add_action( 'init', 'wfbt_ensure_admin_capabilities', 5 );
+
+/**
+ * Redirect legacy or fallback options-general.php URL to official admin.php page.
+ */
+function wfbt_redirect_legacy_settings_url() {
+	if ( is_admin() && isset( $_GET['page'] ) && 'wfbt-settings' === $_GET['page'] && isset( $GLOBALS['pagenow'] ) && 'options-general.php' === $GLOBALS['pagenow'] ) {
+		wp_safe_redirect( admin_url( 'admin.php?page=wfbt-settings' ) );
+		exit;
+	}
+}
+add_action( 'admin_init', 'wfbt_redirect_legacy_settings_url' );
+
+/**
+ * Allow users with manage_woocommerce capability to save plugin settings via options.php.
+ */
+add_filter( 'option_page_capability_wfbt_settings_group', function() {
+	return 'manage_woocommerce';
+} );
+
+/**
  * Add Settings link to the plugin list page.
  */
 function wfbt_add_settings_link( $links ) {
-	$url = current_user_can( 'manage_woocommerce' )
-		? admin_url( 'admin.php?page=wfbt-settings' )
-		: admin_url( 'options-general.php?page=wfbt-settings' );
-
-	$settings_link = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Settings', 'wfbt-server-side' ) . '</a>';
+	$settings_link = '<a href="' . esc_url( admin_url( 'admin.php?page=wfbt-settings' ) ) . '">' . esc_html__( 'Settings', 'wfbt-server-side' ) . '</a>';
 	array_unshift( $links, $settings_link );
 	return $links;
 }

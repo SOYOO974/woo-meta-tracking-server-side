@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.4)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.5)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -50,6 +50,9 @@ woo-fb-tracking-server-side/
   - Déclare la compatibilité HPOS (`FeaturesUtil::declare_compatibility( 'custom_order_tables', ... )`).
   - Initialise `plugin-update-checker` v5.6 relié à `SOYOO974/woo-meta-tracking-server-side` avec support des release assets.
   - Démarre le composant public `Public_Handler::init()` et le contrôleur central `Core::instance()`.
+  - Auto-réparation proactive des permissions d'administration (`wfbt_ensure_admin_capabilities`) sur `init` (priorité 5) pour assigner `manage_woocommerce` aux administrateurs du site.
+  - Redirection automatique de rétrocompatibilité sur `admin_init` (`options-general.php?page=wfbt-settings` $\rightarrow$ `admin.php?page=wfbt-settings`).
+  - Filtre `option_page_capability_wfbt_settings_group` garantissant la sauvegarde sans 403 via `options.php`.
 - **[readme.txt](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/readme.txt)** :
   - Fichier conforme au standard WordPress.org contenant les métadonnées de version, la description, et le changelog extrait par PUC pour la modale native des extensions.
 - **[includes/class-wfbt-core.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-core.php)** :
@@ -65,7 +68,7 @@ woo-fb-tracking-server-side/
 - **[includes/class-wfbt-background-processor.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-background-processor.php)** :
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
-  - Enregistrement robuste du menu d'administration à la priorité 50 sur `admin_menu` avec support universel des droits administrateurs (`manage_options`) et gestionnaires de boutique (`manage_woocommerce`). Repli automatique sous Réglages (`options-general.php`) si `manage_woocommerce` est indisponible.
+  - Enregistrement standard du sous-menu sous `woocommerce` à la priorité 20 sur `admin_menu` avec la capacité requise `manage_woocommerce`.
   - Onglet Configuration : formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics Exécutif :
     - Grille pré-vol d'état (Identifiants Meta, Architecture HPOS & Action Scheduler, RGPD Concord, Débogueur front).
@@ -177,6 +180,11 @@ Sur la page `is_order_received_page()` :
 - **Règle absolue de sécurité (Zéro Info Sensible)** :
   - **Interdiction formelle de committer des secrets** : Ne jamais inclure de tokens d'accès Meta réels (`EAAB...`), de tokens GitHub (`ghp_...`, `gho_...`), de mots de passe, de clés API privées, d'adresses d'environnements confidentiels ou de données clients dans le code ou l'historique Git.
   - **Vérification systématique avant chaque commit et release** : Vérifier impérativement via `git diff` ou recherche textuelle qu'aucune donnée sensible n'a été insérée par inadvertance (ex: lors de tests locaux de l'API Meta).
+
+### F. Auto-Réparation des Droits Administrateur & Enregistrement Menu (Priorité 20)
+- **Problématique 403 récurrente sur WordPress** : Sur certains sites WordPress, le compte administrateur (`manage_options`) peut perdre ou ne jamais avoir reçu les capacités spécifiques créées par WooCommerce (`manage_woocommerce`, `view_woocommerce_reports`) à la suite de migrations de base de données, plugins de rôles ou configurations personnalisées. Lorsque WordPress vérifie l'accès à `admin.php?page=wfbt-settings`, il valide que l'utilisateur possède le droit du menu parent WooCommerce (`manage_woocommerce`). Sans ce droit, WordPress renvoie immédiatement `403 Permission Denied`.
+- **Auto-réparation proactive (`wfbt_ensure_admin_capabilities`)** : Branchée sur `init` à priorité 5, cette fonction vérifie si l'utilisateur courant est administrateur (`manage_options`) mais dépourvu de `manage_woocommerce`. Le cas échéant, elle réattribue instantanément ces capacités au rôle `administrator` et à l'objet `$current_user`.
+- **Alignement Priorité 20** : Le hook `admin_menu` enregistre la page à la priorité standard 20 (strictement identique au plugin Google Ads `woo-gads-server-side`), garantissant un rattachement fiable sous le menu principal WooCommerce.
 
 ---
 
