@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.5)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.6)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -11,10 +11,10 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`.
 2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
 3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
-4. **Conformité RGPD stricte asservie à Concord Cookie Banner** : Respect absolu du consentement marketing, écoute dynamique des événements d'acceptation en direct (activation à chaud sans rechargement de page), et anonymisation CAPI sécurisée par défaut (`anonymize` : transmission valeur, devise, articles et eventID sans PII, sans _fbp/_fbc, sans IP/UA) ou annulation totale (`block`).
+4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord)** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). Écoute dynamique des événements d'acceptation en direct (bouton `#woo-gads-btn-accept`, événement `woo_gads_consent_updated`, `concord:consent`), et gouvernance CAPI sécurisée par défaut (`anonymize` : transmission valeur, devise, articles et eventID sans PII, sans _fbp/_fbc, sans IP/UA) ou annulation totale (`block`).
 5. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
 6. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
-7. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End** : Grille pré-vol complète, inspecteur de cookies de session active (`concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin en direct sur la boutique.
+7. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin en direct sur la boutique (avec affichage de la source du consentement).
 8. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
@@ -69,20 +69,22 @@ woo-fb-tracking-server-side/
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
   - Enregistrement standard du sous-menu sous `woocommerce` à la priorité 20 sur `admin_menu` avec la capacité requise `manage_woocommerce`.
-  - Onglet Configuration : formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), RGPD Concord avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
+  - Onglet Configuration : détection automatique de la bannière native Woo Gads (`woo_gads_settings['enable_builtin_banner']`), formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), gestion RGPD (Woo Gads + Concord) avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics Exécutif :
-    - Grille pré-vol d'état (Identifiants Meta, Architecture HPOS & Action Scheduler, RGPD Concord, Débogueur front).
-    - Inspecteur de cookies de session active en temps réel (`concord`, `_fbp`, `_fbc`) avec bouton d'actualisation et simulation de clic pub Meta (`?fbclid=`).
+    - Grille pré-vol d'état (Identifiants Meta, Architecture HPOS & Action Scheduler, RGPD Consent Management, Débogueur front).
+    - Inspecteur de cookies de session active en temps réel (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`) avec bouton d'actualisation et simulation de clic pub Meta (`?fbclid=`).
     - Outils d'interrogation Meta Graph API v21.0 : test de santé du Dataset (`GET /{pixel_id}`) et test de connexion CAPI (`POST /{pixel_id}/events`).
-    - KPIs de performance HPOS sur 30 jours (taux de succès CAPI, taux de capture `_fbp`, taux de clics Meta Ads `_fbc`, volume de commandes).
+    - KPIs de performance HPOS sur 30 jours (taux de succès CAPI, taux de capture `_fbp`, taux de clics Meta Ads `_fbc`, volume de commandes, ratio de consentement marketing).
     - Histogramme d'activité quotidien sur 14 jours généré en pur SVG vectoriel natif (zéro librairie JS externe).
-    - Tableau d'audit HPOS des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement Concord et bouton « Renvoyer ».
+    - Tableau d'audit HPOS des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement et bouton « Renvoyer ».
   - Onglet Tutoriel & Guide de configuration : 8 étapes structurées sous forme d'accordéon repliable (fermé par défaut) avec boutons « Tout déplier / Tout replier ». Détaille exhaustivement le paramétrage Meta (choix exclusif de l'événement Acheter, matrice exacte des cases à cocher client/événement, génération du token Dataset Quality API, test en direct et Pixel Helper).
 - **[public/class-wfbt-public.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/public/class-wfbt-public.php)** :
   - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (AJAX WooCommerce `added_to_cart`), `InitiateCheckout` et `Purchase`.
   - Instrumentation non intrusive du Pixel `window.fbq` pour journaliser tous les appels dans `window.wfbtEventsLog`.
-  - Barre de débogage flottante en direct (`maybe_render_debug_bar`) pour administrateurs et gestionnaires de boutique (`manage_woocommerce`, `manage_options`, ou `?wfbt_debug=1`) : pastille repliable en bas à droite inspectant l'état du Pixel, le consentement Concord, `_fbp`, `_fbc`, `?fbclid=`, le flux temps réel de tous les événements `fbq` avec paramètres et boutons d'actions rapides.
-  - Intégration Concord Cookie Banner (fonction JS helper `wfbtHasMarketingConsent()`, écouteurs d'événements et polling léger).
+  - Barre de débogage flottante en direct (`maybe_render_debug_bar`) pour administrateurs et gestionnaires de boutique (`manage_woocommerce`, `manage_options`, ou `?wfbt_debug=1`) : pastille repliable en bas à droite inspectant l'état du Pixel, le consentement marketing avec sa source (`GRANTED (woo_gads)`, `GRANTED (concord)`), `_fbp`, `_fbc`, `?fbclid=`, le flux temps réel de tous les événements `fbq` avec paramètres et boutons d'actions rapides.
+  - Détection du consentement en cascade : Priorité 1 au cookie `woo_gads_consent` (avec parsing JSON), Priorité 2 au cookie Concord ou préfixe personnalisé, et objet global `window.ConcordConsent`.
+  - Activation à chaud sans rechargement de page : écoute du bouton `#woo-gads-btn-accept`, de l'événement `woo_gads_consent_updated`, des événements Concord et polling léger fallback.
+  - Capture PHP native `detect_consent_php()` (avec alias rétrocompatible `detect_concord_consent_php()`).
   - Capture de `?fbclid=` en cookie first-party `wfbt_fbclid` (90 jours) + `localStorage`.
   - Injection de champs masqués au checkout pour sauvegarder `_wfbt_fbp`, `_wfbt_fbc` et `_wfbt_consent`.
 
@@ -93,7 +95,7 @@ woo-fb-tracking-server-side/
 ### 1. Capture Navigateur & Atterrissage
 1. Le visiteur clique sur une annonce Facebook/Instagram et atterrit avec `?fbclid=...`.
 2. Le script JS (`public/class-wfbt-public.php`) enregistre ce `fbclid` dans le cookie `wfbt_fbclid` (durée 90 jours, `SameSite=Lax`) et dans le `localStorage`.
-3. Dès que le consentement marketing Concord est accordé :
+3. Dès que le consentement marketing est accordé (via la bannière native Woo Gads ou Concord) :
    - Le Pixel s'initialise (`fbq('init', pixel_id)`).
    - Meta dépose ses propres cookies first-party `_fbp` (Browser ID) et `_fbc` (Click ID).
    - L'événement `PageView` est envoyé, ainsi que l'événement spécifique de la page consultée (`ViewContent` ou `InitiateCheckout`).
@@ -145,7 +147,7 @@ Sur la page `is_order_received_page()` :
 | :--- | :--- | :--- |
 | `_wfbt_fbp` | `string` | Valeur du cookie publicitaire `_fbp` (Browser ID Meta). |
 | `_wfbt_fbc` | `string` | Valeur du cookie `_fbc` ou reconstruction canonique `fb.1.{ts}.{fbclid}`. |
-| `_wfbt_consent` | `string` | État du consentement Concord (`granted`, `denied`, `unknown`). |
+| `_wfbt_consent` | `string` | État du consentement marketing (`granted`, `denied`, `unknown`) issu de Woo Gads ou Concord. |
 | `_wfbt_capi_scheduled` | `string` | Verrou (`yes`) empêchant la planification multiple. |
 | `_wfbt_capi_status` | `string` | Statut CAPI (`Pending`, `Success`, `Failed`, `Ignored (Consent Denied)`). |
 | `_wfbt_capi_sent_at` | `string` | Horodatage MySQL de la transmission réussie vers Meta. |

@@ -4,11 +4,11 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.5
+Stable tag: 2.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Tracking hybride WooCommerce pour Meta (Pixel Navigateur fbq + Conversions API CAPI v21.0), 100% conforme RGPD Concord et compatible HPOS.
+Tracking hybride WooCommerce pour Meta (Pixel Navigateur fbq + Conversions API CAPI v21.0), 100% conforme RGPD (Bannière native Woo Gads & Concord) et compatible HPOS.
 
 == Description ==
 
@@ -16,7 +16,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 * **Pixel Navigateur (`fbq`)** : PageView, ViewContent, AddToCart (AJAX), InitiateCheckout et Purchase.
 * **Conversions API CAPI v21.0 (Server-Side)** : Envoi asynchrone sécurisé du Purchase via WooCommerce Action Scheduler, insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP iOS Safari).
 * **Déduplication parfaite à 100%** : Strict partage du même identifiant `eventID: 'order_' + order_id` entre le front-end et le serveur.
-* **Conformité RGPD Concord** : Respect du consentement marketing avec activation à chaud sans rechargement de page et mode anonymisé par défaut en cas de refus.
+* **Conformité RGPD Multi-Bannières** : Reconnaissance automatique de la bannière native Woo Gads (`woo_gads_consent`) et de Concord, avec activation à chaud sans rechargement de page et mode anonymisé par défaut en cas de refus.
 * **WooCommerce HPOS (High-Performance Order Storage)** : Déclaration de compatibilité et utilisation exclusive des méthodes CRUD de l'objet `$order`.
 * **Normalisation E.164 Réunion** : Conversion automatique des numéros réunionnais (`0692`, `0693`, `0262` -> `+262`) et français (`+33`) avant hachage SHA-256.
 * **Mises à jour automatiques** : Détection et installation transparente des nouvelles versions depuis les releases GitHub.
@@ -28,6 +28,13 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.6 =
+* **Support Natif Multi-Bannières de Consentement (Woo Gads + Concord)** : Détection et asservissement automatiques au cookie first-party `woo_gads_consent` (bannière native du plugin `woo-gads-tracking-server-side`) avec parsing de la charge JSON (`marketing: true|false`).
+* **Activation Front-End à Chaud** : Écouteur d'événement immédiat sur le bouton d'acceptation `#woo-gads-btn-accept` et sur l'événement `woo_gads_consent_updated` pour initialiser le Pixel Meta sans rechargement de page.
+* **Cascade de Consentement Hybride PHP & JS** : Priorité 1 à la bannière native Woo Gads (`woo_gads_consent`), Priorité 2 à Concord et aux préfixes de cookies personnalisés, avec repli sécurisé et respect strict des modes anonymisé / blocage.
+* **Tableau de Bord & Barre de Débogage Enrichis** : Détection visuelle de la bannière Woo Gads dans les réglages, ligne d'inspection en direct du cookie `woo_gads_consent` dans le tableau de bord de diagnostics et affichage de la source du consentement (`GRANTED (woo_gads)` / `GRANTED (concord)`) dans la barre de débogage flottante.
+* **Internationalisation (i18n)** : Modèle maître .pot, fichiers .po et binaires .mo français mis à jour.
 
 = 2.0.5 =
 * **Résolution Définitive de l'Accès Administrateur (403 Permission Denied)** : Auto-réparation proactive des droits WooCommerce (`wfbt_ensure_admin_capabilities`) sur le hook `init`. Rétablit automatiquement les capacités `manage_woocommerce` et `view_woocommerce_reports` pour les administrateurs du site (`manage_options`) victimes de désynchronisation de rôles.

@@ -98,6 +98,8 @@ class Admin_Settings {
 			'cookie_found'       => __( '✓ Found in current browser', 'wfbt-server-side' ),
 			'cookie_missing'     => __( '— Not detected in current browser', 'wfbt-server-side' ),
 			'cookie_no_ad_click' => __( '— No Meta Ad Click detected (?fbclid=)', 'wfbt-server-side' ),
+			'cookie_gads_granted' => __( '✓ Granted (marketing: true)', 'wfbt-server-side' ),
+			'cookie_gads_denied'  => __( '✗ Refused (marketing: false)', 'wfbt-server-side' ),
 		);
 
 		$script = "
@@ -174,7 +176,28 @@ class Admin_Settings {
 						return null;
 					}
 
-					// Concord
+					// Native Woo Gads Cookie ('woo_gads_consent')
+					var gadsCookie = getCookieVal('woo_gads_consent');
+					if (gadsCookie && gadsCookie !== 'present') {
+						try {
+							var gadsData = JSON.parse(gadsCookie);
+							if (gadsData && typeof gadsData.marketing !== 'undefined') {
+								if (gadsData.marketing === true) {
+									$('#wfbt-cookie-gads-box').html('<span style=\"color:#008a00; font-weight:600;\">' + wfbt_i18n.cookie_gads_granted + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">marketing: true</code>');
+								} else {
+									$('#wfbt-cookie-gads-box').html('<span style=\"color:#d93025; font-weight:600;\">' + wfbt_i18n.cookie_gads_denied + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">marketing: false</code>');
+								}
+							} else {
+								$('#wfbt-cookie-gads-box').html('<span style=\"color:#008a00; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span>');
+							}
+						} catch(e) {
+							$('#wfbt-cookie-gads-box').html('<span style=\"color:#008a00; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span>');
+						}
+					} else {
+						$('#wfbt-cookie-gads-box').html('<span style=\"color:#888;\">' + wfbt_i18n.cookie_missing + '</span>');
+					}
+
+					// Concord / Fallback
 					var concordPrefix = $('#wfbt-cookie-concord-box').data('prefix') || 'concord';
 					var cVal = getCookieVal(concordPrefix);
 					if (cVal) {
@@ -279,6 +302,10 @@ class Admin_Settings {
 			$trigger_statuses = array( 'processing', 'completed' );
 		}
 		$all_statuses = function_exists( 'wc_get_order_statuses' ) ? wc_get_order_statuses() : array();
+
+		// Detect native Woo Gads Cookie Banner
+		$gads_settings   = get_option( 'woo_gads_settings', array() );
+		$has_gads_banner = is_array( $gads_settings ) && ! empty( $gads_settings['enable_builtin_banner'] );
 		?>
 		<form method="post" action="options.php">
 			<?php settings_fields( 'wfbt_settings_group' ); ?>
@@ -330,23 +357,31 @@ class Admin_Settings {
 
 			<hr style="margin: 30px 0;" />
 
-			<h3><?php esc_html_e( '2. GDPR Compliance & Concord Cookie Banner', 'wfbt-server-side' ); ?></h3>
+			<h3><?php esc_html_e( '2. GDPR Compliance & Consent Management', 'wfbt-server-side' ); ?></h3>
+
+			<?php if ( $has_gads_banner ) : ?>
+			<div style="background: #e7f7ed; border-left: 4px solid #008a00; padding: 12px 16px; margin: 15px 0; border-radius: 4px; font-size: 13px;">
+				<strong style="color: #008a00;">✓ <?php esc_html_e( 'Native Woo Gads Cookie Banner detected on this store.', 'wfbt-server-side' ); ?></strong><br>
+				<span style="color: #2c3338;"><?php esc_html_e( 'The cookie "woo_gads_consent" is automatically monitored and prioritized for both front-end Meta Pixel and server-side CAPI. No additional configuration needed.', 'wfbt-server-side' ); ?></span>
+			</div>
+			<?php endif; ?>
+
 			<table class="form-table">
 				<tr valign="top">
 					<th scope="row"><?php esc_html_e( 'Condition tracking on GDPR consent', 'wfbt-server-side' ); ?></th>
 					<td>
 						<label>
 							<input type="checkbox" name="wfbt_respect_consent" value="yes" <?php checked( $respect_consent, 'yes' ); ?> />
-							<strong><?php esc_html_e( 'Require marketing consent from Concord Cookie Banner', 'wfbt-server-side' ); ?></strong>
+							<strong><?php esc_html_e( 'Require marketing consent (Woo Gads, Concord or Custom)', 'wfbt-server-side' ); ?></strong>
 						</label>
-						<p class="description"><?php esc_html_e( 'Prevents Browser Pixel execution and blocks or anonymizes CAPI requests if consent is not granted.', 'wfbt-server-side' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Prevents Browser Pixel execution and blocks or anonymizes CAPI requests if marketing consent is not granted.', 'wfbt-server-side' ); ?></p>
 					</td>
 				</tr>
 				<tr valign="top">
-					<th scope="row"><?php esc_html_e( 'Concord cookie name or prefix', 'wfbt-server-side' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Fallback / Custom cookie prefix', 'wfbt-server-side' ); ?></th>
 					<td>
 						<input type="text" name="wfbt_concord_cookie_name" value="<?php echo esc_attr( $concord_cookie_name ); ?>" class="regular-text" />
-						<p class="description"><?php esc_html_e( 'Cookie name or prefix used by your cookie banner (default: concord).', 'wfbt-server-side' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Cookie prefix used by Concord or your custom cookie banner (default: concord). Automatically used as fallback if native woo_gads_consent is not present.', 'wfbt-server-side' ); ?></p>
 					</td>
 				</tr>
 				<tr valign="top">
@@ -426,6 +461,10 @@ class Admin_Settings {
 		$respect_c    = get_option( 'wfbt_respect_consent', 'yes' );
 		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
 		$consent_act  = get_option( 'wfbt_consent_action', 'anonymize' );
+
+		// Detect native Woo Gads Cookie Banner
+		$gads_settings   = get_option( 'woo_gads_settings', array() );
+		$has_gads_banner = is_array( $gads_settings ) && ! empty( $gads_settings['enable_builtin_banner'] );
 
 		// 1. Environment & Architecture status
 		$is_hpos   = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' ) && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
@@ -553,14 +592,15 @@ class Admin_Settings {
 					</div>
 				</div>
 
-				<!-- Tile 3: GDPR Concord -->
+				<!-- Tile 3: GDPR Consent Management -->
 				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
 					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-						<span><?php esc_html_e( '3. GDPR Concord Banner', 'wfbt-server-side' ); ?></span>
+						<span><?php esc_html_e( '3. GDPR Consent Management', 'wfbt-server-side' ); ?></span>
 						<span style="color:#007cba; font-size:11px; background:#f0f6fc; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Compliant', 'wfbt-server-side' ); ?></span>
 					</div>
 					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
-						<div><?php esc_html_e( 'Cookie prefix:', 'wfbt-server-side' ); ?> <code><?php echo esc_html( $cookie_name ); ?></code></div>
+						<div><?php esc_html_e( 'Banner mode:', 'wfbt-server-side' ); ?> <strong><?php echo $has_gads_banner ? esc_html__( 'Native Woo Gads Active', 'wfbt-server-side' ) : esc_html__( 'Auto-detect (Woo Gads / Concord)', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'Fallback prefix:', 'wfbt-server-side' ); ?> <code><?php echo esc_html( $cookie_name ); ?></code></div>
 						<div><?php esc_html_e( 'Enforce consent:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $respect_c ? esc_html__( 'Yes (Dynamic)', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
 						<div><?php esc_html_e( 'If refused:', 'wfbt-server-side' ); ?> <strong><?php echo 'anonymize' === $consent_act ? esc_html__( 'Anonymize (No PII)', 'wfbt-server-side' ) : esc_html__( 'Cancel event', 'wfbt-server-side' ); ?></strong></div>
 					</div>
@@ -602,7 +642,14 @@ class Admin_Settings {
 
 					<div style="display: flex; flex-direction: column; gap: 10px; font-size: 12.5px;">
 						<div style="padding: 8px 12px; background: #f6f7f7; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
-							<span>Concord (<code><?php echo esc_html( $cookie_name ); ?></code>):</span>
+							<span>Native Woo Gads (<code>woo_gads_consent</code>):</span>
+							<div id="wfbt-cookie-gads-box" style="text-align: right;">
+								<span style="color:#888;"><?php esc_html_e( 'Checking...', 'wfbt-server-side' ); ?></span>
+							</div>
+						</div>
+
+						<div style="padding: 8px 12px; background: #f6f7f7; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+							<span>Concord / Fallback (<code><?php echo esc_html( $cookie_name ); ?></code>):</span>
 							<div id="wfbt-cookie-concord-box" data-prefix="<?php echo esc_attr( $cookie_name ); ?>" style="text-align: right;">
 								<span style="color:#888;"><?php esc_html_e( 'Checking...', 'wfbt-server-side' ); ?></span>
 							</div>
@@ -669,7 +716,7 @@ class Admin_Settings {
 					</div>
 					<div style="font-size: 12px; color: #646970;">
 						<?php /* translators: 1: Granted consent count, 2: Denied consent count */ ?>
-						<?php printf( esc_html__( 'Concord Consent: %1$d Granted / %2$d Anonymized or Denied', 'wfbt-server-side' ), $consent_ok_cnt, $consent_no_cnt ); ?>
+						<?php printf( esc_html__( 'Marketing Consent: %1$d Granted / %2$d Anonymized or Denied', 'wfbt-server-side' ), $consent_ok_cnt, $consent_no_cnt ); ?>
 					</div>
 				</div>
 

@@ -59,35 +59,66 @@ class Public_Handler {
 			var wfbt_concord_prefix = <?php echo wp_json_encode( strtolower( esc_attr( $concord_cookie_name ) ) ); ?>;
 			var wfbt_page_events = <?php echo wp_json_encode( $event_data ); ?>;
 
-			// Helper: Check Concord Cookie Banner marketing consent
-			function wfbtHasMarketingConsent() {
+			// Helper: Get marketing consent details and state across supported banners
+			function wfbtGetConsentInfo() {
 				if (!wfbt_respect_consent) {
-					return true;
+					return { hasConsent: true, source: 'unrestricted' };
 				}
+
 				var cookies = document.cookie.split(';');
+
+				// Priority 1: Native Woo Gads Cookie Banner ('woo_gads_consent')
 				for (var i = 0; i < cookies.length; i++) {
 					var parts = cookies[i].trim().split('=');
-					var name = parts[0].toLowerCase();
-					var val = parts[1] ? decodeURIComponent(parts[1]) : '';
-					if (name.indexOf(wfbt_concord_prefix) !== -1) {
-						if (val.indexOf('"marketing":true') !== -1 ||
-							val.indexOf('marketing:true') !== -1 ||
-							val.indexOf('marketing=true') !== -1 ||
-							val === 'all' || val === 'true' || val === 'accepted' || val === 'granted') {
-							return true;
+					if (parts[0] === 'woo_gads_consent') {
+						var val = parts[1] ? decodeURIComponent(parts[1]) : '';
+						try {
+							var payload = JSON.parse(val);
+							if (payload && typeof payload.marketing !== 'undefined') {
+								if (payload.marketing === true) {
+									return { hasConsent: true, source: 'woo_gads' };
+								} else if (payload.marketing === false) {
+									return { hasConsent: false, source: 'woo_gads' };
+								}
+							}
+						} catch(e) {}
+					}
+				}
+
+				// Priority 2: Concord Cookie Banner & configured prefix
+				for (var j = 0; j < cookies.length; j++) {
+					var cParts = cookies[j].trim().split('=');
+					var cName = cParts[0].toLowerCase();
+					var cVal = cParts[1] ? decodeURIComponent(cParts[1]) : '';
+					if (cName.indexOf(wfbt_concord_prefix) !== -1) {
+						if (cVal.indexOf('"marketing":true') !== -1 ||
+							cVal.indexOf('marketing:true') !== -1 ||
+							cVal.indexOf('marketing=true') !== -1 ||
+							cVal === 'all' || cVal === 'true' || cVal === 'accepted' || cVal === 'granted') {
+							return { hasConsent: true, source: 'concord' };
 						}
-						if (val.indexOf('"marketing":false') !== -1 ||
-							val.indexOf('marketing:false') !== -1 ||
-							val === 'refused' || val === 'denied' || val === 'false') {
-							return false;
+						if (cVal.indexOf('"marketing":false') !== -1 ||
+							cVal.indexOf('marketing:false') !== -1 ||
+							cVal === 'refused' || cVal === 'denied' || cVal === 'false') {
+							return { hasConsent: false, source: 'concord' };
 						}
 					}
 				}
-				if (typeof window.ConcordConsent !== 'undefined') {
-					if (window.ConcordConsent.marketing === true) return true;
-					if (window.ConcordConsent.marketing === false) return false;
+
+				if (typeof window.ConcordConsent !== 'undefined' && typeof window.ConcordConsent.marketing !== 'undefined') {
+					if (window.ConcordConsent.marketing === true) {
+						return { hasConsent: true, source: 'concord' };
+					}
+					if (window.ConcordConsent.marketing === false) {
+						return { hasConsent: false, source: 'concord' };
+					}
 				}
-				return false;
+
+				return { hasConsent: false, source: 'none' };
+			}
+
+			function wfbtHasMarketingConsent() {
+				return wfbtGetConsentInfo().hasConsent;
 			}
 
 			// Base fbevents.js initialization
@@ -159,23 +190,38 @@ class Public_Handler {
 
 			window.wfbtInitMetaPixel = initMetaPixel;
 			window.wfbtHasMarketingConsent = wfbtHasMarketingConsent;
+			window.wfbtGetConsentInfo = wfbtGetConsentInfo;
 
 			// Check consent immediately or attach event listeners
 			if (wfbtHasMarketingConsent()) {
 				initMetaPixel();
 			} else {
-				// Listen to Concord Cookie Banner custom events
 				var onConsentUpdated = function() {
 					if (wfbtHasMarketingConsent()) {
 						initMetaPixel();
 					}
 				};
 
+				// 1. Woo Gads Banner hot activation listeners
+				document.addEventListener('woo_gads_consent_updated', onConsentUpdated);
+				window.addEventListener('woo_gads_consent_updated', onConsentUpdated);
+
+				// Universal click listener on native Woo Gads Accept button (#woo-gads-btn-accept)
+				document.addEventListener('click', function(e) {
+					var target = e.target;
+					if (target && (target.id === 'woo-gads-btn-accept' || (target.closest && target.closest('#woo-gads-btn-accept')))) {
+						setTimeout(function() {
+							onConsentUpdated();
+						}, 50);
+					}
+				});
+
+				// 2. Concord Cookie Banner custom events
 				document.addEventListener('concord:consent', onConsentUpdated);
 				document.addEventListener('concord_consent_updated', onConsentUpdated);
 				document.addEventListener('concord:consent_changed', onConsentUpdated);
 				window.addEventListener('message', function(event) {
-					if (event && event.data && typeof event.data === 'string' && event.data.indexOf('concord') !== -1) {
+					if (event && event.data && typeof event.data === 'string' && (event.data.indexOf('concord') !== -1 || event.data.indexOf('woo_gads') !== -1)) {
 						onConsentUpdated();
 					}
 				});
@@ -418,7 +464,7 @@ class Public_Handler {
 
 		$fbp     = isset( $_COOKIE['_fbp'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_COOKIE['_fbp'] ) ) ) : '';
 		$fbc     = isset( $_COOKIE['_fbc'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) ) ) : '';
-		$consent = self::detect_concord_consent_php();
+		$consent = self::detect_consent_php();
 		?>
 		<input type="hidden" name="wfbt_fbp" id="wfbt_fbp" value="<?php echo esc_attr( $fbp ); ?>" />
 		<input type="hidden" name="wfbt_fbc" id="wfbt_fbc" value="<?php echo esc_attr( $fbc ); ?>" />
@@ -478,12 +524,12 @@ class Public_Handler {
 			$fbc    = 'fb.1.' . ( time() * 1000 ) . '.' . $fbclid;
 		}
 
-		// 3. Capture Concord consent state
+		// 3. Capture consent state
 		$consent = '';
 		if ( ! empty( $_POST['wfbt_consent'] ) ) {
 			$consent = sanitize_text_field( wp_unslash( $_POST['wfbt_consent'] ) );
 		} else {
-			$consent = self::detect_concord_consent_php();
+			$consent = self::detect_consent_php();
 		}
 
 		// Update order metadata if values found
@@ -507,16 +553,29 @@ class Public_Handler {
 	}
 
 	/**
-	 * Detect Concord marketing consent directly from PHP cookies.
+	 * Detect marketing consent directly from PHP cookies (Priority: Woo Gads > Concord/Custom).
 	 *
 	 * @return string 'granted', 'denied', or 'unknown'
 	 */
-	public static function detect_concord_consent_php() {
+	public static function detect_consent_php() {
 		$respect = get_option( 'wfbt_respect_consent', 'yes' );
 		if ( 'yes' !== $respect ) {
 			return 'granted';
 		}
 
+		// Priority 1: Native Woo Gads Cookie Banner ('woo_gads_consent')
+		if ( isset( $_COOKIE['woo_gads_consent'] ) ) {
+			$raw  = is_string( $_COOKIE['woo_gads_consent'] ) ? wp_unslash( $_COOKIE['woo_gads_consent'] ) : '';
+			$data = json_decode( rawurldecode( $raw ), true );
+			if ( ! is_array( $data ) ) {
+				$data = json_decode( stripslashes( rawurldecode( $raw ) ), true );
+			}
+			if ( is_array( $data ) && isset( $data['marketing'] ) ) {
+				return ( true === $data['marketing'] || 'true' === $data['marketing'] || 1 === $data['marketing'] || '1' === $data['marketing'] ) ? 'granted' : 'denied';
+			}
+		}
+
+		// Priority 2: Concord Cookie Banner & configured prefix
 		$prefix = strtolower( get_option( 'wfbt_concord_cookie_name', 'concord' ) );
 		foreach ( $_COOKIE as $cookie_name => $cookie_val ) {
 			if ( false !== stripos( $cookie_name, $prefix ) ) {
@@ -536,6 +595,15 @@ class Public_Handler {
 		}
 
 		return 'unknown';
+	}
+
+	/**
+	 * Backward compatibility alias for detect_consent_php().
+	 *
+	 * @return string
+	 */
+	public static function detect_concord_consent_php() {
+		return self::detect_consent_php();
 	}
 
 	/**
@@ -591,7 +659,7 @@ class Public_Handler {
 							<?php esc_html_e( 'GDPR Consent & Cookies', 'wfbt-server-side' ); ?>
 						</div>
 						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-							<span><?php esc_html_e( 'Concord Consent:', 'wfbt-server-side' ); ?></span>
+							<span><?php esc_html_e( 'Marketing Consent:', 'wfbt-server-side' ); ?></span>
 							<span id="wfbt-debug-consent-val" style="font-weight: 700; font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #f0f0f1; color: #646970;">Checking...</span>
 						</div>
 						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px;">
@@ -660,15 +728,21 @@ class Public_Handler {
 
 			function updateDebugView() {
 				// 1. Consent
-				var hasConsent = (typeof window.wfbtHasMarketingConsent === 'function') ? window.wfbtHasMarketingConsent() : false;
-				if (hasConsent) {
-					consentVal.textContent = 'GRANTED';
+				var info = (typeof window.wfbtGetConsentInfo === 'function') ? window.wfbtGetConsentInfo() : {
+					hasConsent: (typeof window.wfbtHasMarketingConsent === 'function') ? window.wfbtHasMarketingConsent() : false,
+					source: 'legacy'
+				};
+
+				if (info.hasConsent) {
+					var sourceTag = info.source && info.source !== 'unrestricted' && info.source !== 'legacy' ? ' (' + info.source + ')' : '';
+					consentVal.textContent = 'GRANTED' + sourceTag;
 					consentVal.style.background = '#e7f7ed';
 					consentVal.style.color = '#008a00';
-					consentPillBadge.textContent = 'Consent: OK';
+					consentPillBadge.textContent = 'Consent: OK' + (info.source === 'woo_gads' ? ' (GAds)' : (info.source === 'concord' ? ' (Concord)' : ''));
 					consentPillBadge.style.background = '#008a00';
 				} else {
-					consentVal.textContent = 'DENIED / WAITING';
+					var deniedTag = info.source && info.source !== 'none' ? ' (' + info.source + ')' : '';
+					consentVal.textContent = 'DENIED' + deniedTag + ' / WAITING';
 					consentVal.style.background = '#fce8e6';
 					consentVal.style.color = '#d93025';
 					consentPillBadge.textContent = 'No Consent';
