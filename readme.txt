@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.6
+Stable tag: 2.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,12 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.7 =
+* **Résolution Universelle des Autorisations d'Accès (403)** : Interception dynamique des droits via le filtre natif WordPress `user_has_cap`. Tout compte utilisateur possédant `manage_options` (administrateurs, super-administrateurs, comptes agence) se voit attribuer en mémoire les capacités `manage_woocommerce` et `view_woocommerce_reports`, garantissant un accès instantané et sans erreur 403 à la page `admin.php?page=wfbt-settings` et au menu parent WooCommerce, indépendamment des anomalies ou filtres de base de données.
+* **Détection Dynamique de Capacité Admin** : Méthode `Admin_Settings::get_capability()` adaptée pour renvoyer `manage_woocommerce` si disponible, avec repli immédiat sur `manage_options`.
+* **Rattachement Menu Sécurisé** : Repli automatique sous le menu `Réglages` (`options-general.php`) si le parent WooCommerce n'est pas encore présent dans la hiérarchie admin.
+* **Sauvegarde Réglages Résiliente** : Filtre `option_page_capability_wfbt_settings_group` aligné pour autoriser la validation via `options.php` pour tout administrateur ou gestionnaire de boutique.
 
 = 2.0.6 =
 * **Support Natif Multi-Bannières de Consentement (Woo Gads + Concord)** : Détection et asservissement automatiques au cookie first-party `woo_gads_consent` (bannière native du plugin `woo-gads-tracking-server-side`) avec parsing de la charge JSON (`marketing: true|false`).

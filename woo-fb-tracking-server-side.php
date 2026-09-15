@@ -3,7 +3,7 @@
  * Plugin Name: Woo FB Tracking Server-Side
  * Plugin URI:  https://github.com/SOYOO974/woo-meta-tracking-server-side/
  * Description: WooCommerce plugin for Hybrid Native tracking (Meta Browser Pixel + Conversions API CAPI v21.0) with Concord & Woo Gads GDPR consent and HPOS compatibility.
- * Version:     2.0.6
+ * Version:     2.0.7
  * Author:      SOYOO
  * Author URI:  https://soyoo.re
  * Text Domain: wfbt-server-side
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'WFBT_VERSION', '2.0.6' );
+define( 'WFBT_VERSION', '2.0.7' );
 define( 'WFBT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WFBT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'WFBT_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -74,12 +74,28 @@ function wfbt_init_plugin() {
 add_action( 'plugins_loaded', 'wfbt_init_plugin', 11 );
 
 /**
- * Ensure administrators have the manage_woocommerce capability.
+ * Universally grant WooCommerce management capabilities to administrators.
+ * This dynamically intercepts capability checks in memory, ensuring any user
+ * with 'manage_options' automatically passes 'manage_woocommerce' and
+ * 'view_woocommerce_reports' checks across WordPress core, menus, and plugins,
+ * without relying on database role mutations.
+ */
+function wfbt_grant_admin_capabilities( $allcaps, $caps, $args, $user ) {
+	if ( ! empty( $allcaps['manage_options'] ) ) {
+		$allcaps['manage_woocommerce']       = true;
+		$allcaps['view_woocommerce_reports'] = true;
+	}
+	return $allcaps;
+}
+add_filter( 'user_has_cap', 'wfbt_grant_admin_capabilities', 10, 4 );
+
+/**
+ * Ensure administrators have the manage_woocommerce capability persisted in database.
  * Self-heals the common capability desynchronization where site administrators
- * are missing WooCommerce management rights.
+ * are missing WooCommerce management rights in wp_user_roles.
  */
 function wfbt_ensure_admin_capabilities() {
-	if ( current_user_can( 'manage_options' ) && ! current_user_can( 'manage_woocommerce' ) ) {
+	if ( is_admin() && current_user_can( 'manage_options' ) ) {
 		$admin_role = get_role( 'administrator' );
 		if ( $admin_role && ! $admin_role->has_cap( 'manage_woocommerce' ) ) {
 			$admin_role->add_cap( 'manage_woocommerce' );
@@ -105,10 +121,10 @@ function wfbt_redirect_legacy_settings_url() {
 add_action( 'admin_init', 'wfbt_redirect_legacy_settings_url' );
 
 /**
- * Allow users with manage_woocommerce capability to save plugin settings via options.php.
+ * Allow users with manage_woocommerce or manage_options capability to save plugin settings via options.php.
  */
 add_filter( 'option_page_capability_wfbt_settings_group', function() {
-	return 'manage_woocommerce';
+	return current_user_can( 'manage_woocommerce' ) ? 'manage_woocommerce' : 'manage_options';
 } );
 
 /**

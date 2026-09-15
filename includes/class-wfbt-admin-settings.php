@@ -32,18 +32,23 @@ class Admin_Settings {
 	 * @return string
 	 */
 	public static function get_capability() {
-		return 'manage_woocommerce';
+		return current_user_can( 'manage_woocommerce' ) ? 'manage_woocommerce' : 'manage_options';
 	}
 
 	/**
-	 * Add Settings Page to WooCommerce menu.
+	 * Add Settings Page to WooCommerce menu with fallback to Settings menu.
 	 */
 	public static function add_settings_page() {
+		global $admin_page_hooks;
+
+		$capability  = self::get_capability();
+		$parent_slug = ( isset( $admin_page_hooks['woocommerce'] ) || did_action( 'woocommerce_loaded' ) ) ? 'woocommerce' : 'options-general.php';
+
 		add_submenu_page(
-			'woocommerce',
+			$parent_slug,
 			__( 'Meta Hybrid Tracking (Pixel + CAPI)', 'wfbt-server-side' ),
 			__( 'Meta Tracking', 'wfbt-server-side' ),
-			self::get_capability(),
+			$capability,
 			'wfbt-settings',
 			array( __CLASS__, 'render_settings_page' )
 		);
