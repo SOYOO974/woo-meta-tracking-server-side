@@ -23,7 +23,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 
 == Installation ==
 
-1. Téléversez le dossier du plugin dans le répertoire `/wp-content/plugins/woo-meta-tracking-server-side`.
+1. Téléversez le dossier du plugin dans le répertoire `/wp-content/plugins/woo-fb-tracking-server-side`.
 2. Activez l'extension via le menu 'Extensions' de WordPress.
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 

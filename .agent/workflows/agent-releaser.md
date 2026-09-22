@@ -31,15 +31,9 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
 // turbo
 11. Pousser le tag vers GitHub (`git push origin v[VERSION]`)
 
-12. Créer le package zip de release `woo-meta-tracking-server-side.zip` :
+12. Créer le package zip de release `woo-meta-tracking-server-side.zip` avec Python (standardisation des slashs `/` sous Linux et dossier racine `woo-fb-tracking-server-side`) :
     ```powershell
-    $tempDir = Join-Path $env:TEMP "woo-meta-tracking-server-side"
-    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
-    New-Item -ItemType Directory -Path $tempDir | Out-Null
-    Get-ChildItem -Path . -Exclude ".git", "*.zip" | Copy-Item -Destination $tempDir -Recurse
-    $zipPath = ".\woo-meta-tracking-server-side.zip"
-    Compress-Archive -Path $tempDir -DestinationPath $zipPath
-    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    python -c "import zipfile, pathlib; p = pathlib.Path('.'); z = zipfile.ZipFile('woo-meta-tracking-server-side.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(f, 'woo-fb-tracking-server-side/' + str(f.relative_to(p)).replace('\\', '/')) for f in p.rglob('*') if f.is_file() and not any(f.parts[0].startswith(x) for x in ['.git', '.agent']) and not f.name.endswith('.zip')]; z.close()"
     ```
 
 13. Publier la release sur GitHub avec l'outil GitHub CLI (`gh`) :

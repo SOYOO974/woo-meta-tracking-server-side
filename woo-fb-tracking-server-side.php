@@ -29,7 +29,7 @@ use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 $wfbt_update_checker = PucFactory::buildUpdateChecker(
 	'https://github.com/SOYOO974/woo-meta-tracking-server-side/',
 	__FILE__,
-	'woo-meta-tracking-server-side'
+	'woo-fb-tracking-server-side'
 );
 
 // Set the branch that contains the stable release.

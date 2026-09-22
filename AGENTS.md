@@ -198,6 +198,10 @@ Sur la page `is_order_received_page()` :
 - L'API Meta Graph v21.0 exige impérativement au moins un paramètre d'identification client (`user_data`). Contrairement à Google Ads qui dispose d'une modélisation sans cookies (Consent Mode v2), Meta rejette catégoriquement tout événement avec `user_data: {}` avec l'erreur `HTTP 400: Vous n’avez pas ajouté suffisamment de données de paramètres d’informations client pour cet évènement` (subcode 2804050).
 - Le plugin implémente un garde-fou pré-vol : si `em`, `ph`, `fbp`, `fbc` et `external_id` sont absents, ou si le client a refusé le consentement marketing, la requête HTTP vers Meta est court-circuitée, évitant les erreurs 400, les logs d'erreurs et les faux e-mails d'alerte critique.
 
+### H. Format d'Archive ZIP & Normalisation des Séparateurs (Slashs `/` vs Antislashs `\`)
+- Sur Windows, la commande native PowerShell `Compress-Archive` enregistre les chemins relatifs avec des antislashs (`\`). Lorsque WordPress décompresse cette archive sur un serveur Linux de production, le système de fichiers n'interprète pas `\` comme un séparateur mais comme un caractère littéral de nom de fichier. Cela crée des fichiers uniques à plat au lieu de dossiers (ex: `woo-fb-tracking-server-side\includes\class-wfbt-core.php`), provoquant la désactivation immédiate de l'extension par WordPress suite à l'absence perçue du fichier d'en-tête racine et la perte d'autorisation 403.
+- Les releases sont désormais obligatoirement assemblées via le module Python standard `zipfile`, garantissant des slashs POSIX (`/`) universels et un dossier racine `woo-fb-tracking-server-side/` strictement conforme au slug déclaré dans PUC.
+
 ---
 
 ## 6. 🚀 Procédure de Release & Déploiement
