@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.7)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.8)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -11,11 +11,13 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`.
 2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
 3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
-4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord)** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). Écoute dynamique des événements d'acceptation en direct (bouton `#woo-gads-btn-accept`, événement `woo_gads_consent_updated`, `concord:consent`), et gouvernance CAPI sécurisée par défaut (`anonymize` : transmission valeur, devise, articles et eventID sans PII, sans _fbp/_fbc, sans IP/UA) ou annulation totale (`block`).
-5. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
-6. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
-7. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin en direct sur la boutique (avec affichage de la source du consentement).
-8. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
+4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). Écoute dynamique des événements d'acceptation en direct (bouton `#woo-gads-btn-accept`, événement `woo_gads_consent_updated`, `concord:consent`). En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
+5. **Garde Pré-Vol CAPI & Anti-Erreur 400** : Vérification stricte de la présence d'au moins un identifiant direct client (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commandes manuelles sans coordonnées), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)`, évitant le code d'erreur Meta 100 / sous-code 2804050 et les alertes email intempestives.
+6. **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()`) pour maximiser la correspondance Meta.
+7. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
+8. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
+9. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin en direct sur la boutique (avec affichage de la source du consentement).
+10. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
 
@@ -62,14 +64,16 @@ woo-fb-tracking-server-side/
   - Moteur CAPI Graph API v21.0 (`https://graph.facebook.com/v21.0/{pixel_id}/events`).
   - Implémente `format_phone_e164($phone, $country)` pour La Réunion et la France.
   - Hachage SHA-256 de tous les champs PII (`em`, `ph`, `fn`, `ln`, `ct`, `st`, `zp`, `country`).
+  - Injection de l'identifiant client WooCommerce (`external_id`) pour renforcer l'Event Match Quality (EMQ).
   - Injection des identifiants non hachés (`fbp`, `fbc`, `client_ip_address`, `client_user_agent`).
-  - Gouvernance RGPD : annulation (`block`) ou anonymisation (`anonymize`) si `_wfbt_consent === 'denied'`.
-  - Mise à jour HPOS des statuts de commande (`Success`, `Failed`, `Ignored (Consent Denied)`).
+  - Garde Pré-Vol anti-rejet : Vérifie la présence d'au moins un identifiant direct avant transmission. Si absent, marque proprement la commande `Ignored (Insufficient Customer Data)` sans erreur ni alerte mail.
+  - Gouvernance RGPD : annulation automatique et sécurisée (`Ignored (Consent Denied)`) si `_wfbt_consent === 'denied'`.
+  - Mise à jour HPOS des statuts de commande (`Success`, `Failed`, `Ignored (Consent Denied)`, `Ignored (Insufficient Customer Data)`).
 - **[includes/class-wfbt-background-processor.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-background-processor.php)** :
   - File d'attente asynchrone Action Scheduler (hook `wfbt_send_capi_event`, groupe `wfbt_capi`).
 - **[includes/class-wfbt-admin-settings.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-admin-settings.php)** :
   - Enregistrement standard du sous-menu sous `woocommerce` à la priorité 20 sur `admin_menu` avec la capacité requise `manage_woocommerce`.
-  - Onglet Configuration : détection automatique de la bannière native Woo Gads (`woo_gads_settings['enable_builtin_banner']`), formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), gestion RGPD (Woo Gads + Concord) avec mode anonymisé par défaut en cas de refus (`anonymize`), statuts déclencheurs personnalisés et alertes e-mail.
+  - Onglet Configuration : détection automatique de la bannière native Woo Gads (`woo_gads_settings['enable_builtin_banner']`), formulaire avec bascules Pixel front, barre de débogage flottante admin (`wfbt_enable_debug_bar`), gestion RGPD simplifiée (Woo Gads + Concord) avec annulation automatique en cas de refus, statuts déclencheurs personnalisés et alertes e-mail.
   - Onglet Diagnostics Exécutif :
     - Grille pré-vol d'état (Identifiants Meta, Architecture HPOS & Action Scheduler, RGPD Consent Management, Débogueur front).
     - Inspecteur de cookies de session active en temps réel (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`) avec bouton d'actualisation et simulation de clic pub Meta (`?fbclid=`).
@@ -130,9 +134,10 @@ Sur la page `is_order_received_page()` :
    - `Core::maybe_send_capi_event` vérifie que `_wfbt_capi_scheduled !== 'yes'` et que `_wfbt_capi_status !== 'Success'`.
    - L'événement est enfilé dans WooCommerce Action Scheduler (`Background_Processor::schedule_event`).
 2. Action Scheduler exécute en arrière-plan `Meta_Api::send_purchase_event` :
-   - **Contrôle RGPD** : Si `_wfbt_consent === 'denied'`, le plugin annule l'envoi (`Ignored (Consent Denied)`) en mode strict CNIL ou anonymise le payload.
+   - **Contrôle RGPD** : Si `_wfbt_consent === 'denied'`, le plugin annule l'envoi (`Ignored (Consent Denied)`) en conformité stricte CNIL.
+   - **Garde Pré-Vol Données Client** : Vérifie la présence d'au moins un identifiant direct (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commande manuelle ou incomplète), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)` sans lever d'erreur ni générer d'alerte mail.
    - **Normalisation E.164 Réunion/France** : Le numéro de téléphone est converti au format strict (ex: `0692 12 34 56` $\rightarrow$ `262692123456`) puis haché en SHA-256.
-   - **Enrichissement PII** : Email, nom, prénom, ville, code postal, pays (`re`, `fr`) hachés en SHA-256 minuscules.
+   - **Enrichissement PII & EMQ** : Email, prénom, nom, ville, code postal, pays (`re`, `fr`) hachés en SHA-256 minuscules, et transmission de l'ID client WooCommerce (`external_id`).
    - **Identifiants Meta** : `fbp`, `fbc`, `client_ip_address`, `client_user_agent` transmis non hachés.
    - **Identifiant de déduplication** : `'event_id' => 'order_' . $order->get_id()`.
    - **Transmission HTTP POST** vers `https://graph.facebook.com/v21.0/{pixel_id}/events`.
@@ -149,7 +154,7 @@ Sur la page `is_order_received_page()` :
 | `_wfbt_fbc` | `string` | Valeur du cookie `_fbc` ou reconstruction canonique `fb.1.{ts}.{fbclid}`. |
 | `_wfbt_consent` | `string` | État du consentement marketing (`granted`, `denied`, `unknown`) issu de Woo Gads ou Concord. |
 | `_wfbt_capi_scheduled` | `string` | Verrou (`yes`) empêchant la planification multiple. |
-| `_wfbt_capi_status` | `string` | Statut CAPI (`Pending`, `Success`, `Failed`, `Ignored (Consent Denied)`). |
+| `_wfbt_capi_status` | `string` | Statut CAPI (`Pending`, `Success`, `Failed`, `Ignored (Consent Denied)`, `Ignored (Insufficient Customer Data)`). |
 | `_wfbt_capi_sent_at` | `string` | Horodatage MySQL de la transmission réussie vers Meta. |
 | `_wfbt_capi_error` | `string` | Détail de l'erreur API ou réseau en cas d'échec. |
 
@@ -188,6 +193,10 @@ Sur la page `is_order_received_page()` :
 - **Interception dynamique en mémoire (`user_has_cap`)** : Le hook `user_has_cap` intercepte tous les contrôles de capacité de WordPress. Si l'utilisateur possède `manage_options`, le filtre lui injecte dynamiquement `manage_woocommerce = true` et `view_woocommerce_reports = true`. Cette approche est 100% infaillible car elle ne dépend ni du nom du rôle, ni des mutations en base de données, ni du cache d'objets.
 - **Auto-réparation proactive (`wfbt_ensure_admin_capabilities`)** : Branchée sur `init` à priorité 5, cette fonction vérifie et persiste les capacités manquantes directement dans `wp_user_roles` et l'objet `$current_user`.
 - **Repli Menu Résilient** : `Admin_Settings::get_capability()` évalue dynamiquement la capacité disponible (`manage_woocommerce` puis repli sur `manage_options`), et `Admin_Settings::add_settings_page()` bascule automatiquement sous `options-general.php` si le menu parent WooCommerce n'est pas présent dans l'arborescence admin.
+
+### G. Garde Pré-Vol CAPI & Anti-Erreur 400 (Subcode 2804050)
+- L'API Meta Graph v21.0 exige impérativement au moins un paramètre d'identification client (`user_data`). Contrairement à Google Ads qui dispose d'une modélisation sans cookies (Consent Mode v2), Meta rejette catégoriquement tout événement avec `user_data: {}` avec l'erreur `HTTP 400: Vous n’avez pas ajouté suffisamment de données de paramètres d’informations client pour cet évènement` (subcode 2804050).
+- Le plugin implémente un garde-fou pré-vol : si `em`, `ph`, `fbp`, `fbc` et `external_id` sont absents, ou si le client a refusé le consentement marketing, la requête HTTP vers Meta est court-circuitée, évitant les erreurs 400, les logs d'erreurs et les faux e-mails d'alerte critique.
 
 ---
 

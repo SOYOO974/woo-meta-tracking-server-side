@@ -410,7 +410,20 @@ class Public_Handler {
 					fbcInput.value = wfbtResolveFbc();
 				}
 				if (consentInput) {
-					consentInput.value = (typeof window.wfbtHasMarketingConsent === 'function' && window.wfbtHasMarketingConsent()) ? 'granted' : 'denied';
+					var consentInfo = (typeof window.wfbtGetConsentInfo === 'function') ? window.wfbtGetConsentInfo() : null;
+					if (consentInfo) {
+						if (consentInfo.hasConsent) {
+							consentInput.value = 'granted';
+						} else if (consentInfo.source !== 'none') {
+							// Explicitly refused on an active banner (woo_gads or concord)
+							consentInput.value = 'denied';
+						} else {
+							// No banner detected or no interaction yet
+							consentInput.value = 'unknown';
+						}
+					} else {
+						consentInput.value = 'unknown';
+					}
 				}
 			}
 
@@ -624,7 +637,6 @@ class Public_Handler {
 
 		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
 		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
-		$consent_mode = get_option( 'wfbt_consent_action', 'anonymize' );
 		?>
 		<!-- WFBT Front-End Live Debug Bar -->
 		<div id="wfbt-debug-container" style="position: fixed; bottom: 18px; right: 18px; z-index: 9999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px;">

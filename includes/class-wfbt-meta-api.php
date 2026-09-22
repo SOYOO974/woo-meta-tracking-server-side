@@ -41,24 +41,34 @@ class Meta_Api {
 			return false;
 		}
 
-		// GDPR Concord Consent Check
+		// GDPR Cookie Consent Check (Native Woo Gads & Concord)
 		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
 		$consent         = $order->get_meta( '_wfbt_consent' );
 
 		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
-			$consent_action = get_option( 'wfbt_consent_action', 'anonymize' );
-			if ( 'block' === $consent_action ) {
-				Logger::log( "Order #{$order_id}: Marketing consent was refused by customer. CAPI transmission cancelled (GDPR Concord compliance)." );
-				$order->update_meta_data( '_wfbt_capi_status', 'Ignored (Consent Denied)' );
-				$order->delete_meta_data( '_wfbt_capi_error' );
-				$order->save();
-				return true;
-			}
+			Logger::log( "Order #{$order_id}: Marketing consent was refused by customer. CAPI transmission cancelled (GDPR compliance)." );
+			$order->update_meta_data( '_wfbt_capi_status', 'Ignored (Consent Denied)' );
+			$order->delete_meta_data( '_wfbt_capi_error' );
+			$order->save();
+			return true;
 		}
 
-		$is_anonymized = ( 'yes' === $respect_consent && 'denied' === $consent && 'anonymize' === get_option( 'wfbt_consent_action', 'anonymize' ) );
-		$payload       = $this->build_payload( $order, $is_anonymized );
-		$url           = sprintf( 'https://graph.facebook.com/%s/%s/events', self::API_VERSION, rawurlencode( $pixel_id ) );
+		$payload   = $this->build_payload( $order );
+		$user_data = isset( $payload['user_data'] ) ? $payload['user_data'] : array();
+
+		// Pre-flight guard: Meta CAPI strictly requires at least one direct customer matching identifier.
+		// Sending an event without email, phone, fbp, fbc, or external_id causes Meta to reject with HTTP 400 (subcode 2804050).
+		$has_identifier = ! empty( $user_data['em'] ) || ! empty( $user_data['ph'] ) || ! empty( $user_data['fbp'] ) || ! empty( $user_data['fbc'] ) || ! empty( $user_data['external_id'] );
+
+		if ( ! $has_identifier ) {
+			Logger::log( "Order #{$order_id}: Insufficient customer information parameters (missing email, phone, fbp, fbc, external_id). CAPI transmission safely skipped to prevent Meta rejection (subcode 2804050).", 'warning' );
+			$order->update_meta_data( '_wfbt_capi_status', 'Ignored (Insufficient Customer Data)' );
+			$order->delete_meta_data( '_wfbt_capi_error' );
+			$order->save();
+			return true;
+		}
+
+		$url = sprintf( 'https://graph.facebook.com/%s/%s/events', self::API_VERSION, rawurlencode( $pixel_id ) );
 
 		$args = array(
 			'method'  => 'POST',
@@ -115,11 +125,10 @@ class Meta_Api {
 	 * Build the Meta CAPI payload for a Purchase event.
 	 *
 	 * @param \WC_Order $order The WooCommerce Order.
-	 * @param bool      $anonymize Whether to strip PII due to partial consent.
 	 * @return array The event data array.
 	 */
-	private function build_payload( $order, $anonymize = false ) {
-		$user_data   = $this->extract_user_data( $order, $anonymize );
+	private function build_payload( $order ) {
+		$user_data   = $this->extract_user_data( $order );
 		$custom_data = $this->extract_custom_data( $order );
 
 		$event_time = $order->get_date_created() ? $order->get_date_created()->getTimestamp() : time();
@@ -147,16 +156,10 @@ class Meta_Api {
 	 * Extracts and hashes user data (PII) according to Meta specifications.
 	 *
 	 * @param \WC_Order $order The WooCommerce order.
-	 * @param bool      $anonymize Whether to strip PII.
 	 * @return array The user data.
 	 */
-	private function extract_user_data( $order, $anonymize = false ) {
+	private function extract_user_data( $order ) {
 		$user_data = array();
-
-		// If anonymized mode, do not send PII, cookies, or IP/UA
-		if ( $anonymize ) {
-			return $user_data;
-		}
 
 		// 1. Email (em)
 		$email = $order->get_billing_email();
@@ -209,19 +212,25 @@ class Meta_Api {
 			$user_data['country'] = array( $this->hash_data( $country_code ) );
 		}
 
-		// 9. Browser ID (_fbp) - Meta expects raw unhashed string
+		// 9. Customer External ID (external_id) - WooCommerce Customer ID to boost Event Match Quality (EMQ)
+		$customer_id = $order->get_customer_id();
+		if ( $customer_id > 0 ) {
+			$user_data['external_id'] = array( (string) $customer_id );
+		}
+
+		// 10. Browser ID (_fbp) - Meta expects raw unhashed string
 		$fbp = $order->get_meta( '_wfbt_fbp' );
 		if ( ! empty( $fbp ) ) {
 			$user_data['fbp'] = $fbp;
 		}
 
-		// 10. Click ID (_fbc) - Meta expects raw unhashed string
+		// 11. Click ID (_fbc) - Meta expects raw unhashed string
 		$fbc = $order->get_meta( '_wfbt_fbc' );
 		if ( ! empty( $fbc ) ) {
 			$user_data['fbc'] = $fbc;
 		}
 
-		// 11. Client IP Address & User Agent
+		// 12. Client IP Address & User Agent
 		$ip_address = $order->get_customer_ip_address();
 		if ( $ip_address ) {
 			$user_data['client_ip_address'] = $ip_address;

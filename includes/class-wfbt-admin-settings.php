@@ -301,7 +301,6 @@ class Admin_Settings {
 		$enable_pixel        = get_option( 'wfbt_enable_pixel', 'yes' );
 		$respect_consent     = get_option( 'wfbt_respect_consent', 'yes' );
 		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
-		$consent_action      = get_option( 'wfbt_consent_action', 'anonymize' );
 		$trigger_statuses    = get_option( 'wfbt_trigger_statuses', array( 'processing', 'completed' ) );
 		if ( ! is_array( $trigger_statuses ) ) {
 			$trigger_statuses = array( 'processing', 'completed' );
@@ -379,7 +378,7 @@ class Admin_Settings {
 							<input type="checkbox" name="wfbt_respect_consent" value="yes" <?php checked( $respect_consent, 'yes' ); ?> />
 							<strong><?php esc_html_e( 'Require marketing consent (Woo Gads, Concord or Custom)', 'wfbt-server-side' ); ?></strong>
 						</label>
-						<p class="description"><?php esc_html_e( 'Prevents Browser Pixel execution and blocks or anonymizes CAPI requests if marketing consent is not granted.', 'wfbt-server-side' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Prevents Browser Pixel execution and safely cancels CAPI requests if marketing consent is explicitly refused by the customer (strict GDPR / CNIL compliance).', 'wfbt-server-side' ); ?></p>
 					</td>
 				</tr>
 				<tr valign="top">
@@ -387,23 +386,6 @@ class Admin_Settings {
 					<td>
 						<input type="text" name="wfbt_concord_cookie_name" value="<?php echo esc_attr( $concord_cookie_name ); ?>" class="regular-text" />
 						<p class="description"><?php esc_html_e( 'Cookie prefix used by Concord or your custom cookie banner (default: concord). Automatically used as fallback if native woo_gads_consent is not present.', 'wfbt-server-side' ); ?></p>
-					</td>
-				</tr>
-				<tr valign="top">
-					<th scope="row"><?php esc_html_e( 'CAPI action when consent is refused', 'wfbt-server-side' ); ?></th>
-					<td>
-						<fieldset>
-							<label style="display: block; margin-bottom: 10px;">
-								<input type="radio" name="wfbt_consent_action" value="anonymize" <?php checked( $consent_action, 'anonymize' ); ?> />
-								<strong><?php esc_html_e( 'Send anonymized request (Default & Recommended - No PII, no _fbp/_fbc, no IP/User-Agent)', 'wfbt-server-side' ); ?></strong>
-								<p class="description" style="margin: 3px 0 0 24px;"><?php esc_html_e( 'Safely sends order value, currency, contents, and eventID for statistical aggregation without customer personal data.', 'wfbt-server-side' ); ?></p>
-							</label>
-							<label style="display: block;">
-								<input type="radio" name="wfbt_consent_action" value="block" <?php checked( $consent_action, 'block' ); ?> />
-								<span><?php esc_html_e( 'Cancel CAPI request completely (Strict CNIL)', 'wfbt-server-side' ); ?></span>
-								<p class="description" style="margin: 3px 0 0 24px;"><?php esc_html_e( 'Completely cancels and ignores CAPI transmission if marketing consent is refused.', 'wfbt-server-side' ); ?></p>
-							</label>
-						</fieldset>
 					</td>
 				</tr>
 			</table>
@@ -465,7 +447,6 @@ class Admin_Settings {
 		$debug_bar    = get_option( 'wfbt_enable_debug_bar', 'yes' );
 		$respect_c    = get_option( 'wfbt_respect_consent', 'yes' );
 		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
-		$consent_act  = get_option( 'wfbt_consent_action', 'anonymize' );
 
 		// Detect native Woo Gads Cookie Banner
 		$gads_settings   = get_option( 'woo_gads_settings', array() );
@@ -607,7 +588,7 @@ class Admin_Settings {
 						<div><?php esc_html_e( 'Banner mode:', 'wfbt-server-side' ); ?> <strong><?php echo $has_gads_banner ? esc_html__( 'Native Woo Gads Active', 'wfbt-server-side' ) : esc_html__( 'Auto-detect (Woo Gads / Concord)', 'wfbt-server-side' ); ?></strong></div>
 						<div><?php esc_html_e( 'Fallback prefix:', 'wfbt-server-side' ); ?> <code><?php echo esc_html( $cookie_name ); ?></code></div>
 						<div><?php esc_html_e( 'Enforce consent:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $respect_c ? esc_html__( 'Yes (Dynamic)', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
-						<div><?php esc_html_e( 'If refused:', 'wfbt-server-side' ); ?> <strong><?php echo 'anonymize' === $consent_act ? esc_html__( 'Anonymize (No PII)', 'wfbt-server-side' ) : esc_html__( 'Cancel event', 'wfbt-server-side' ); ?></strong></div>
+						<div><?php esc_html_e( 'If refused:', 'wfbt-server-side' ); ?> <strong><?php esc_html_e( 'Cancel event (Strict CNIL)', 'wfbt-server-side' ); ?></strong></div>
 					</div>
 				</div>
 
@@ -721,7 +702,7 @@ class Admin_Settings {
 					</div>
 					<div style="font-size: 12px; color: #646970;">
 						<?php /* translators: 1: Granted consent count, 2: Denied consent count */ ?>
-						<?php printf( esc_html__( 'Marketing Consent: %1$d Granted / %2$d Anonymized or Denied', 'wfbt-server-side' ), $consent_ok_cnt, $consent_no_cnt ); ?>
+						<?php printf( esc_html__( 'Marketing Consent: %1$d Granted / %2$d Refused or Ignored', 'wfbt-server-side' ), $consent_ok_cnt, $consent_no_cnt ); ?>
 					</div>
 				</div>
 
@@ -1353,8 +1334,8 @@ class Admin_Settings {
 							<?php esc_html_e( 'Check "Require marketing consent from Concord Cookie Banner". The default cookie prefix is "concord". The plugin automatically listens to Concord consent acceptance in real-time without requiring a page reload!', 'wfbt-server-side' ); ?>
 						</li>
 						<li>
-							<strong><?php esc_html_e( 'Action when consent is refused:', 'wfbt-server-side' ); ?></strong>
-							<?php esc_html_e( 'The default and recommended choice is "Send anonymized request". If a customer refuses marketing cookies, CAPI still transmits the order total, currency, purchased item IDs, and deduplication eventID, but strips all customer PII (email, phone, name, address), strips advertising cookies (_fbp, _fbc), and removes IP address / User Agent.', 'wfbt-server-side' ); ?>
+							<strong><?php esc_html_e( 'GDPR & CNIL Compliance:', 'wfbt-server-side' ); ?></strong>
+							<?php esc_html_e( 'If a customer explicitly refuses marketing cookies, both the Browser Pixel and CAPI event are safely cancelled to ensure strict compliance with European privacy regulations and prevent invalid Meta API errors.', 'wfbt-server-side' ); ?>
 						</li>
 						<li>
 							<strong><?php esc_html_e( 'Trigger statuses:', 'wfbt-server-side' ); ?></strong>

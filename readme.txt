@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.7
+Stable tag: 2.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,7 +16,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 * **Pixel Navigateur (`fbq`)** : PageView, ViewContent, AddToCart (AJAX), InitiateCheckout et Purchase.
 * **Conversions API CAPI v21.0 (Server-Side)** : Envoi asynchrone sécurisé du Purchase via WooCommerce Action Scheduler, insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP iOS Safari).
 * **Déduplication parfaite à 100%** : Strict partage du même identifiant `eventID: 'order_' + order_id` entre le front-end et le serveur.
-* **Conformité RGPD Multi-Bannières** : Reconnaissance automatique de la bannière native Woo Gads (`woo_gads_consent`) et de Concord, avec activation à chaud sans rechargement de page et mode anonymisé par défaut en cas de refus.
+* **Conformité RGPD Multi-Bannières** : Reconnaissance automatique de la bannière native Woo Gads (`woo_gads_consent`) et de Concord, avec activation à chaud sans rechargement de page et annulation sécurisée en cas de refus.
 * **WooCommerce HPOS (High-Performance Order Storage)** : Déclaration de compatibilité et utilisation exclusive des méthodes CRUD de l'objet `$order`.
 * **Normalisation E.164 Réunion** : Conversion automatique des numéros réunionnais (`0692`, `0693`, `0262` -> `+262`) et français (`+33`) avant hachage SHA-256.
 * **Mises à jour automatiques** : Détection et installation transparente des nouvelles versions depuis les releases GitHub.
@@ -28,6 +28,13 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.8 =
+* **Garde Pré-Vol Données Client CAPI (Anti-Erreur 400)** : Contrôle systématique de la présence d'au moins un identifiant direct (`em`, `ph`, `fbp`, `fbc`, `external_id`) avant tout appel HTTP vers Meta Graph API v21.0. Élimine définitivement les erreurs HTTP 400 (subcode 2804050 : "Vous n’avez pas ajouté suffisamment de données de paramètres d’informations client pour cet évènement"), le statut d'échec et les faux e-mails d'alerte sur les commandes sans contact. Les commandes incomplètes sont désormais marquées avec le statut explicite `Ignored (Insufficient Customer Data)`.
+* **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()`) dans le paramètre CAPI `external_id` pour maximiser le score de correspondance des événements d'achat.
+* **Simplification RGPD & Suppression du Mode Anonymisé Invalide** : Suppression du choix "requête anonymisée" qui vidait `user_data` et provoquait le rejet Meta. En cas de refus explicite des cookies marketing, la transmission CAPI est immédiatement et proprement annulée (`Ignored (Consent Denied)`), assurant le respect strict des recommandations CNIL et le zéro rejet API.
+* **Synchronisation Précise du Consentement Front-End** : Affinement de la détection JS lors de la validation du panier distinguant l'accord explicite (`granted`), le refus explicite sur bannière active (`denied`) et l'absence d'interaction ou de bannière (`unknown`), évitant les blocages indus.
+* **Interface Réglages & Tableau de Bord Épurés** : Nettoyage des options de configuration, actualisation de la tuile pré-vol RGPD et des libellés de KPIs d'audit.
 
 = 2.0.7 =
 * **Résolution Universelle des Autorisations d'Accès (403)** : Interception dynamique des droits via le filtre natif WordPress `user_has_cap`. Tout compte utilisateur possédant `manage_options` (administrateurs, super-administrateurs, comptes agence) se voit attribuer en mémoire les capacités `manage_woocommerce` et `view_woocommerce_reports`, garantissant un accès instantané et sans erreur 403 à la page `admin.php?page=wfbt-settings` et au menu parent WooCommerce, indépendamment des anomalies ou filtres de base de données.
