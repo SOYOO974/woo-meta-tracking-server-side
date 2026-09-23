@@ -623,13 +623,13 @@ class Public_Handler {
 	 * Render floating Front-End Debug Bar for Store Managers and Administrators.
 	 */
 	public static function maybe_render_debug_bar() {
-		$enable = get_option( 'wfbt_enable_debug_bar', 'yes' );
-		if ( 'yes' !== $enable ) {
-			return;
-		}
-
+		$enable    = get_option( 'wfbt_enable_debug_bar', 'no' );
 		$is_admin  = current_user_can( 'manage_woocommerce' ) || current_user_can( 'manage_options' );
 		$has_param = isset( $_GET['wfbt_debug'] ) && '1' === (string) $_GET['wfbt_debug'];
+
+		if ( 'yes' !== $enable && ! $has_param ) {
+			return;
+		}
 
 		if ( ! $is_admin && ! $has_param ) {
 			return;

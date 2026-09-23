@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.8
+Stable tag: 2.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,10 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.0.9 =
+* **Désactivation par Défaut de la Barre de Débogage** : L'option « Activer la barre de débogage flottante pour les administrateurs » (`wfbt_enable_debug_bar`) est désormais décochée par défaut pour garantir une interface front-end nette et sans pastille intrusive lors de la navigation des administrateurs.
+* **Déclenchement On-Demand Résilient (`?wfbt_debug=1`)** : Même lorsque la barre permanente est désactivée dans les réglages, les administrateurs et testeurs peuvent l'afficher à tout moment à chaud en ajoutant `?wfbt_debug=1` dans l'URL.
 
 = 2.0.8 =
 * **Garde Pré-Vol Données Client CAPI (Anti-Erreur 400)** : Contrôle systématique de la présence d'au moins un identifiant direct (`em`, `ph`, `fbp`, `fbc`, `external_id`) avant tout appel HTTP vers Meta Graph API v21.0. Élimine définitivement les erreurs HTTP 400 (subcode 2804050 : "Vous n’avez pas ajouté suffisamment de données de paramètres d’informations client pour cet évènement"), le statut d'échec et les faux e-mails d'alerte sur les commandes sans contact. Les commandes incomplètes sont désormais marquées avec le statut explicite `Ignored (Insufficient Customer Data)`.

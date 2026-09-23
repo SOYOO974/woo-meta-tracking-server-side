@@ -351,7 +351,7 @@ class Admin_Settings {
 					<th scope="row"><?php esc_html_e( 'Front-End Debugger Bar', 'wfbt-server-side' ); ?></th>
 					<td>
 						<label>
-							<input type="checkbox" name="wfbt_enable_debug_bar" value="yes" <?php checked( get_option( 'wfbt_enable_debug_bar', 'yes' ), 'yes' ); ?> />
+							<input type="checkbox" name="wfbt_enable_debug_bar" value="yes" <?php checked( get_option( 'wfbt_enable_debug_bar', 'no' ), 'yes' ); ?> />
 							<strong><?php esc_html_e( 'Enable live floating debug bar for administrators', 'wfbt-server-side' ); ?></strong>
 						</label>
 						<p class="description"><?php esc_html_e( 'Displays an expandable tracking inspector at the bottom-right of your store pages when logged in as admin or store manager. Allows you to verify fbq event triggers, Concord consent, and _fbp/_fbc cookies in real-time. Completely invisible to regular shoppers.', 'wfbt-server-side' ); ?></p>
@@ -444,7 +444,7 @@ class Admin_Settings {
 		$access_token = get_option( 'wfbt_access_token', '' );
 		$test_code    = get_option( 'wfbt_test_code', '' );
 		$enable_pixel = get_option( 'wfbt_enable_pixel', 'yes' );
-		$debug_bar    = get_option( 'wfbt_enable_debug_bar', 'yes' );
+		$debug_bar    = get_option( 'wfbt_enable_debug_bar', 'no' );
 		$respect_c    = get_option( 'wfbt_respect_consent', 'yes' );
 		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
 
