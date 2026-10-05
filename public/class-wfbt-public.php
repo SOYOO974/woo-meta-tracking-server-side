@@ -588,7 +588,7 @@ class Public_Handler {
 				});
 
 				// 3. Listen to WooCommerce AJAX AddToCart (archive buttons, Cart Drawers, theme AJAX single add-to-cart)
-				var wfbtIdFormat = <?php echo wp_json_encode( Product_Id::get_format() ); ?>;
+				var wfbtIdFormat = <?php echo wp_json_encode( Product_Id::get_effective_format() ); ?>;
 				function wfbtFormatId(id, sku) {
 					id = id ? String(id) : '';
 					sku = sku ? String(sku) : '';

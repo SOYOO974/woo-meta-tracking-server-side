@@ -94,7 +94,8 @@ woo-fb-tracking-server-side/
   - Capture de `?fbclid=` en cookie first-party `wfbt_fbclid` (90 jours) + `localStorage`.
   - Injection de champs masqués au checkout pour sauvegarder `_wfbt_fbp`, `_wfbt_fbc` et `_wfbt_consent`.
 - **[includes/class-wfbt-product-id.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-product-id.php)** (v2.1.0) :
-  - Source unique des `content_ids` / `contents[].id` (Pixel ET CAPI). Option `wfbt_content_id_format` : `sku` (défaut, SKU sinon ID — identique à Woo Merchant Sync SOYOO), `id`, `gla` (`gla_{id}`, Google for WooCommerce / import GMC), `fb_wc` (`{sku}_{id}` ou `wc_post_id_{id}`). Filtre `wfbt_content_id` pour les formats sur-mesure.
+  - Source unique des `content_ids` / `contents[].id` (Pixel ET CAPI). Option `wfbt_content_id_format` : `auto` (défaut — délègue à Woo Meta Catalog Feed SOYOO via le filtre `soyoo_meta_catalog_content_id`, repli SKU sinon ID = logique historique du flux), `sku`, `id`, `gla` (`gla_{id}`, Google for WooCommerce / import GMC), `fb_wc` (`{sku}_{id}` ou `wc_post_id_{id}`). Filtre `wfbt_content_id` pour les formats sur-mesure.
+  - **Contrat inter-extensions** : le flux catalogue (`woo-meta-catalog-feed-soyoo`) est la source de vérité des ID. Il expose `add_filter( 'soyoo_meta_catalog_content_id', fn( $id, $product ) => Feed_Item::get_content_id( $product ), 10, 2 )`. Le tracking détecte le flux via `WOO_META_CATALOG_FEED_VERSION` et affiche dans ses réglages un contrôle d'alignement en direct (5 produits, tracking vs `g:id`). Le flux peut réciproquement lire `\WFBT\Product_Id::get()` / `get_effective_format()` pour afficher le statut côté catalogue.
   - **Règle absolue** : ces ID doivent être identiques à la colonne « ID de contenu » du catalogue Meta, sinon taux de correspondance catalogue = 0 % (ViewContent/AddToCart/Purchase « Manquant » dans le Gestionnaire des ventes).
 
 ---

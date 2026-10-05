@@ -74,7 +74,7 @@ class Admin_Settings {
 			Product_Id::OPTION,
 			array(
 				'sanitize_callback' => function ( $value ) {
-					return array_key_exists( $value, Product_Id::get_formats() ) ? $value : 'sku';
+					return array_key_exists( $value, Product_Id::get_formats() ) ? $value : 'auto';
 				},
 			)
 		);
@@ -304,6 +304,88 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Render the live alignment status between tracking content_ids and the
+	 * Woo Meta Catalog Feed SOYOO <g:id> on a sample of published products.
+	 */
+	private static function render_catalog_alignment_status() {
+		if ( ! Product_Id::is_feed_plugin_active() ) {
+			echo '<p class="description">' . esc_html__( 'Woo Meta Catalog Feed SOYOO not detected: make sure the selected format matches the IDs of your Meta catalog.', 'wfbt-server-side' ) . '</p>';
+			return;
+		}
+
+		$sample = wc_get_products(
+			array(
+				'status'  => 'publish',
+				'limit'   => 5,
+				'orderby' => 'date',
+				'order'   => 'DESC',
+				'type'    => array( 'simple', 'variation', 'external' ),
+			)
+		);
+
+		$rows       = array();
+		$mismatches = 0;
+		foreach ( $sample as $product ) {
+			$tracking_id = Product_Id::get( $product );
+			$feed_id     = Product_Id::get_feed_reference_id( $product );
+			$match       = ( $tracking_id === $feed_id );
+			if ( ! $match ) {
+				$mismatches++;
+			}
+			$rows[] = array( $product->get_name(), $tracking_id, $feed_id, $match );
+		}
+
+		$effective = Product_Id::get_effective_format();
+		$ok        = ( 0 === $mismatches );
+		$bg        = $ok ? '#e7f7ed' : '#fce8e6';
+		$border    = $ok ? '#008a00' : '#d93025';
+		?>
+		<div style="background: <?php echo esc_attr( $bg ); ?>; border-left: 4px solid <?php echo esc_attr( $border ); ?>; padding: 10px 14px; margin-top: 10px; border-radius: 4px; font-size: 13px; max-width: 760px;">
+			<strong style="color: <?php echo esc_attr( $border ); ?>;">
+				<?php
+				echo $ok
+					? esc_html__( '✓ Aligned with Woo Meta Catalog Feed SOYOO', 'wfbt-server-side' )
+					: esc_html__( '✗ Mismatch with Woo Meta Catalog Feed SOYOO: catalog match rate will drop to 0%', 'wfbt-server-side' );
+				?>
+			</strong>
+			<span style="color: #646970;">
+				<?php
+				printf(
+					/* translators: 1: feed plugin version, 2: effective strategy */
+					esc_html__( '(feed v%1$s — strategy: %2$s)', 'wfbt-server-side' ),
+					esc_html( Product_Id::get_feed_version() ?: '?' ),
+					esc_html( 'feed' === $effective ? __( 'delegated to the feed', 'wfbt-server-side' ) : $effective )
+				);
+				?>
+			</span>
+			<?php if ( ! $ok ) : ?>
+				<br><?php esc_html_e( 'Select "Automatic" above and save to align the tracking with the catalog feed.', 'wfbt-server-side' ); ?>
+			<?php endif; ?>
+			<?php if ( ! empty( $rows ) ) : ?>
+				<table class="widefat striped" style="margin-top: 8px; font-size: 12px;">
+					<thead><tr>
+						<th><?php esc_html_e( 'Product', 'wfbt-server-side' ); ?></th>
+						<th><?php esc_html_e( 'Tracking content_id', 'wfbt-server-side' ); ?></th>
+						<th><?php esc_html_e( 'Catalog feed g:id', 'wfbt-server-side' ); ?></th>
+						<th></th>
+					</tr></thead>
+					<tbody>
+					<?php foreach ( $rows as $row ) : ?>
+						<tr>
+							<td><?php echo esc_html( wp_trim_words( $row[0], 8 ) ); ?></td>
+							<td><code><?php echo esc_html( $row[1] ); ?></code></td>
+							<td><code><?php echo esc_html( $row[2] ); ?></code></td>
+							<td><?php echo $row[3] ? '✅' : '❌'; ?></td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Render Configuration Tab.
 	 */
 	private static function render_configuration_tab() {
@@ -376,7 +458,8 @@ class Admin_Settings {
 							<?php endforeach; ?>
 						</select>
 						<p class="description"><?php esc_html_e( 'The content_ids sent with ViewContent, AddToCart, InitiateCheckout and Purchase (Pixel + CAPI) must be strictly identical to the "Content ID" column of your Meta catalog (Commerce Manager > Catalog > Items). Otherwise Meta reports a 0% catalog match rate and catalog ads cannot work.', 'wfbt-server-side' ); ?></p>
-						<?php if ( 'gla' !== $current_format && ( defined( 'WC_GLA_VERSION' ) || class_exists( '\Automattic\WooCommerce\GoogleListingsAndAds\PluginFactory' ) ) ) : ?>
+						<?php self::render_catalog_alignment_status(); ?>
+						<?php if ( ! Product_Id::is_feed_plugin_active() && 'gla' !== $current_format && ( defined( 'WC_GLA_VERSION' ) || class_exists( '\Automattic\WooCommerce\GoogleListingsAndAds\PluginFactory' ) ) ) : ?>
 							<p class="description" style="color: #b26200;"><?php esc_html_e( 'Google for WooCommerce is active: if your Meta catalog is imported from Google Merchant Center, its IDs probably use the "gla_1234" format.', 'wfbt-server-side' ); ?></p>
 						<?php endif; ?>
 					</td>

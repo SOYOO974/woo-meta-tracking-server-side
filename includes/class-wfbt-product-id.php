@@ -12,6 +12,12 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Single source of truth for the `content_ids` / `contents[].id` values sent to Meta
  * (Pixel + CAPI). These IDs MUST strictly match the "ID" column of the Meta catalog,
  * otherwise Meta reports 0% catalog match rate and Advantage+ catalog ads cannot work.
+ *
+ * Inter-plugin contract with Woo Meta Catalog Feed SOYOO (catalog = source of truth):
+ * - In "auto" mode, the ID is requested through the filter `soyoo_meta_catalog_content_id`
+ *   (the feed plugin returns the exact <g:id> it writes in the XML).
+ * - If the feed plugin is active but does not implement the filter yet (<= v1.2.0),
+ *   its historical logic (SKU, fallback to Product ID) is applied.
  */
 class Product_Id {
 
@@ -19,6 +25,11 @@ class Product_Id {
 	 * Option name storing the selected format.
 	 */
 	const OPTION = 'wfbt_content_id_format';
+
+	/**
+	 * Filter exposed by Woo Meta Catalog Feed SOYOO to resolve the catalog <g:id>.
+	 */
+	const FEED_FILTER = 'soyoo_meta_catalog_content_id';
 
 	/**
 	 * Maximum number of variation IDs sent with a ViewContent on a variable product.
@@ -32,7 +43,8 @@ class Product_Id {
 	 */
 	public static function get_formats() {
 		return array(
-			'sku'   => __( 'SKU (fallback to Product ID) — default, same as Woo Merchant Sync SOYOO', 'wfbt-server-side' ),
+			'auto'  => __( 'Automatic — aligned with Woo Meta Catalog Feed SOYOO (recommended, SKU fallback if not installed)', 'wfbt-server-side' ),
+			'sku'   => __( 'SKU (fallback to Product ID)', 'wfbt-server-side' ),
 			'id'    => __( 'WooCommerce Product ID (e.g. 1234)', 'wfbt-server-side' ),
 			'gla'   => __( 'Google for WooCommerce / Google Listings & Ads (e.g. gla_1234)', 'wfbt-server-side' ),
 			'fb_wc' => __( 'Facebook for WooCommerce (e.g. SKU_1234 or wc_post_id_1234)', 'wfbt-server-side' ),
@@ -40,13 +52,54 @@ class Product_Id {
 	}
 
 	/**
-	 * Current format.
+	 * Selected format (as saved in settings).
 	 *
 	 * @return string
 	 */
 	public static function get_format() {
-		$format = get_option( self::OPTION, 'sku' );
-		return array_key_exists( $format, self::get_formats() ) ? $format : 'sku';
+		$format = get_option( self::OPTION, 'auto' );
+		return array_key_exists( $format, self::get_formats() ) ? $format : 'auto';
+	}
+
+	/**
+	 * Is Woo Meta Catalog Feed SOYOO active on this site?
+	 *
+	 * @return bool
+	 */
+	public static function is_feed_plugin_active() {
+		return defined( 'WOO_META_CATALOG_FEED_VERSION' ) || class_exists( '\SOYOO\MetaCatalog\Feed_Item' );
+	}
+
+	/**
+	 * Does the feed plugin implement the shared ID contract (filter)?
+	 *
+	 * @return bool
+	 */
+	public static function feed_exposes_contract() {
+		return self::is_feed_plugin_active() && has_filter( self::FEED_FILTER );
+	}
+
+	/**
+	 * Feed plugin version, if active.
+	 *
+	 * @return string
+	 */
+	public static function get_feed_version() {
+		return defined( 'WOO_META_CATALOG_FEED_VERSION' ) ? (string) WOO_META_CATALOG_FEED_VERSION : '';
+	}
+
+	/**
+	 * Effective strategy actually applied ('feed', 'sku', 'id', 'gla', 'fb_wc').
+	 * Used by the JS fallback formatter and the admin status box.
+	 *
+	 * @return string
+	 */
+	public static function get_effective_format() {
+		$format = self::get_format();
+		if ( 'auto' !== $format ) {
+			return $format;
+		}
+		return self::feed_exposes_contract() ? 'feed' : 'sku';
 	}
 
 	/**
@@ -63,23 +116,20 @@ class Product_Id {
 			return '';
 		}
 
-		$id  = (string) $product->get_id();
-		$sku = (string) $product->get_sku();
+		$content_id = '';
+		$format     = self::get_format();
 
-		switch ( self::get_format() ) {
-			case 'id':
-				$content_id = $id;
-				break;
-			case 'gla':
-				$content_id = 'gla_' . $id;
-				break;
-			case 'fb_wc':
-				$content_id = '' !== $sku ? $sku . '_' . $id : 'wc_post_id_' . $id;
-				break;
-			case 'sku':
-			default:
-				$content_id = '' !== $sku ? $sku : $id;
-				break;
+		// 1. Auto mode: ask the catalog feed plugin for its exact <g:id>.
+		if ( 'auto' === $format && self::feed_exposes_contract() ) {
+			$feed_id = apply_filters( self::FEED_FILTER, null, $product );
+			if ( is_scalar( $feed_id ) && '' !== (string) $feed_id ) {
+				$content_id = (string) $feed_id;
+			}
+		}
+
+		// 2. Static formats (and auto fallback = SKU, the feed historical logic).
+		if ( '' === $content_id ) {
+			$content_id = self::format_static( $product, 'auto' === $format ? 'sku' : $format );
 		}
 
 		/**
@@ -89,6 +139,50 @@ class Product_Id {
 		 * @param \WC_Product $product    Product or variation.
 		 */
 		return (string) apply_filters( 'wfbt_content_id', $content_id, $product );
+	}
+
+	/**
+	 * ID written by the catalog feed plugin for this product (reference for alignment checks).
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return string Empty if the feed plugin is not active.
+	 */
+	public static function get_feed_reference_id( $product ) {
+		if ( ! self::is_feed_plugin_active() || ! $product instanceof \WC_Product ) {
+			return '';
+		}
+		if ( self::feed_exposes_contract() ) {
+			$feed_id = apply_filters( self::FEED_FILTER, null, $product );
+			if ( is_scalar( $feed_id ) && '' !== (string) $feed_id ) {
+				return (string) $feed_id;
+			}
+		}
+		// Feed <= v1.2.0 historical logic.
+		return self::format_static( $product, 'sku' );
+	}
+
+	/**
+	 * Apply a static ID format.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @param string      $format  Format key.
+	 * @return string
+	 */
+	private static function format_static( $product, $format ) {
+		$id  = (string) $product->get_id();
+		$sku = (string) $product->get_sku();
+
+		switch ( $format ) {
+			case 'id':
+				return $id;
+			case 'gla':
+				return 'gla_' . $id;
+			case 'fb_wc':
+				return '' !== $sku ? $sku . '_' . $id : 'wc_post_id_' . $id;
+			case 'sku':
+			default:
+				return '' !== $sku ? $sku : $id;
+		}
 	}
 
 	/**

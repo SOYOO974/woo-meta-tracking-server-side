@@ -34,6 +34,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 * **Correspondance catalogue Meta** : nouveau réglage « Format des Content ID » (SKU, ID produit, gla_ID Google for WooCommerce, format Facebook for WooCommerce) appliqué de façon identique à ViewContent, AddToCart, InitiateCheckout et Purchase (Pixel + CAPI). Corrige le taux de correspondance catalogue à 0 %.
 * **ViewContent produits variables** : envoi des ID de variations (les articles réels du catalogue) et du tableau `contents`.
 * **Purchase** : ajout de `content_ids` côté Pixel et CAPI.
+* **Alignement automatique avec Woo Meta Catalog Feed SOYOO** : nouveau mode « Automatique » (par défaut) qui délègue le content_id au flux catalogue via le filtre `soyoo_meta_catalog_content_id` (repli sur la logique SKU du flux si le filtre n'est pas encore exposé). Contrôle d'alignement en direct dans les réglages (échantillon de 5 produits, tracking vs `g:id` du flux).
 
 = 2.0.9 =
 * **Désactivation par Défaut de la Barre de Débogage** : L'option « Activer la barre de débogage flottante pour les administrateurs » (`wfbt_enable_debug_bar`) est désormais décochée par défaut pour garantir une interface front-end nette et sans pastille intrusive lors de la navigation des administrateurs.
