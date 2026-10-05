@@ -15,6 +15,12 @@ class Public_Handler {
 	 * Initialize Front-End Hooks.
 	 */
 	public static function init() {
+		// Server-side AddToCart capture: must be registered BEFORE the is_admin() guard,
+		// because theme AJAX add-to-cart handlers (Woodmart, Flatsome...) run through
+		// admin-ajax.php where is_admin() returns true.
+		add_action( 'woocommerce_add_to_cart', array( __CLASS__, 'capture_add_to_cart' ), 20, 6 );
+		add_filter( 'woocommerce_add_to_cart_fragments', array( __CLASS__, 'inject_add_to_cart_fragment' ), 99 );
+
 		// Only run on frontend.
 		if ( is_admin() ) {
 			return;
@@ -253,18 +259,36 @@ class Public_Handler {
 		$events   = array();
 		$currency = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'EUR';
 
+		// 0. AddToCart captured server-side on a classic (non-AJAX) form submission.
+		$pending_atc = self::consume_pending_add_to_cart();
+		if ( $pending_atc ) {
+			$events[] = $pending_atc;
+		}
+
 		// 1. ViewContent on Single Product
 		if ( function_exists( 'is_product' ) && is_product() ) {
-			$product = wc_get_product();
+			$product = wc_get_product( get_queried_object_id() );
+			if ( ! $product ) {
+				$product = wc_get_product();
+			}
 			if ( $product ) {
-				$product_id = (string) ( $product->get_sku() ?: $product->get_id() );
+				$content_ids = Product_Id::get_view_ids( $product );
+				$price       = (float) wc_get_price_to_display( $product );
+				$contents    = array();
+				foreach ( $content_ids as $cid ) {
+					$contents[] = array(
+						'id'       => $cid,
+						'quantity' => 1,
+					);
+				}
 				$events[] = array(
 					'name'   => 'ViewContent',
 					'params' => array(
-						'content_ids'  => array( $product_id ),
+						'content_ids'  => $content_ids,
+						'contents'     => $contents,
 						'content_name' => $product->get_name(),
 						'content_type' => 'product',
-						'value'        => (float) $product->get_price(),
+						'value'        => $price,
 						'currency'     => $currency,
 					),
 				);
@@ -279,7 +303,7 @@ class Public_Handler {
 				foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
 					$product = $cart_item['data'];
 					if ( $product ) {
-						$pid = (string) ( $product->get_sku() ?: $product->get_id() );
+						$pid = Product_Id::get( $product );
 						$content_ids[] = $pid;
 						$contents[]    = array(
 							'id'         => $pid,
@@ -318,7 +342,7 @@ class Public_Handler {
 					foreach ( $order->get_items() as $item ) {
 						$product = $item->get_product();
 						if ( $product ) {
-							$pid        = (string) ( $product->get_sku() ?: $product->get_id() );
+							$pid        = Product_Id::get( $product );
 							$contents[] = array(
 								'id'         => $pid,
 								'quantity'   => (int) $item->get_quantity(),
@@ -331,6 +355,7 @@ class Public_Handler {
 						'name'    => 'Purchase',
 						'params'  => array(
 							'content_type' => 'product',
+							'content_ids'  => array_values( array_unique( wp_list_pluck( $contents, 'id' ) ) ),
 							'contents'     => $contents,
 							'value'        => (float) $order->get_total(),
 							'currency'     => $order->get_currency(),
@@ -345,6 +370,128 @@ class Public_Handler {
 		}
 
 		return $events;
+	}
+
+	/**
+	 * Build the AddToCart event payload from a cart addition.
+	 *
+	 * @param int $product_id   Product ID.
+	 * @param int $quantity     Quantity added.
+	 * @param int $variation_id Variation ID (0 if simple).
+	 * @return array|null
+	 */
+	private static function build_add_to_cart_event( $product_id, $quantity, $variation_id = 0 ) {
+		$product = wc_get_product( $variation_id ? $variation_id : $product_id );
+		if ( ! $product ) {
+			return null;
+		}
+
+		$cid      = Product_Id::get( $product );
+		$quantity = max( 1, (float) $quantity );
+		$price    = (float) wc_get_price_to_display( $product );
+
+		return array(
+			'name'    => 'AddToCart',
+			'params'  => array(
+				'content_type' => 'product',
+				'content_ids'  => array( $cid ),
+				'contents'     => array(
+					array(
+						'id'         => $cid,
+						'quantity'   => $quantity,
+						'item_price' => $price,
+					),
+				),
+				'content_name' => $product->get_name(),
+				'value'        => round( $price * $quantity, 2 ),
+				'currency'     => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'EUR',
+			),
+			'options' => array(
+				'eventID' => 'atc_' . wp_generate_password( 12, false ),
+			),
+		);
+	}
+
+	/**
+	 * Capture every cart addition (classic form POST, wc-ajax, admin-ajax theme handlers)
+	 * and queue the AddToCart event in the WooCommerce session.
+	 * It is then consumed either by the AJAX fragments response or the next page render.
+	 *
+	 * @param string $cart_item_key Cart item key.
+	 * @param int    $product_id    Product ID.
+	 * @param int    $quantity      Quantity.
+	 * @param int    $variation_id  Variation ID.
+	 */
+	public static function capture_add_to_cart( $cart_item_key, $product_id, $quantity, $variation_id = 0 ) {
+		if ( empty( get_option( 'wfbt_pixel_id', '' ) ) || 'yes' !== get_option( 'wfbt_enable_pixel', 'yes' ) ) {
+			return;
+		}
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+
+		$event = self::build_add_to_cart_event( $product_id, $quantity, $variation_id );
+		if ( ! $event ) {
+			return;
+		}
+
+		$event['ajax'] = wp_doing_ajax() || ( defined( 'WC_DOING_AJAX' ) && WC_DOING_AJAX );
+
+		$pending   = WC()->session->get( 'wfbt_pending_atc', array() );
+		$pending   = is_array( $pending ) ? $pending : array();
+		$pending[] = $event;
+		WC()->session->set( 'wfbt_pending_atc', array_slice( $pending, -10 ) );
+	}
+
+	/**
+	 * Pop all pending AddToCart events from the session.
+	 *
+	 * @return array
+	 */
+	private static function pop_pending_add_to_cart() {
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return array();
+		}
+		$pending = WC()->session->get( 'wfbt_pending_atc', array() );
+		if ( empty( $pending ) || ! is_array( $pending ) ) {
+			return array();
+		}
+		WC()->session->set( 'wfbt_pending_atc', null );
+		return $pending;
+	}
+
+	/**
+	 * Consume the most recent pending AddToCart event for a full page render
+	 * (classic non-AJAX "Add to cart" form submission on single product pages).
+	 * AJAX-originated events are discarded here: they are delivered via fragments
+	 * or by the JS fallback, never replayed on page load (no duplicates).
+	 *
+	 * @return array|null
+	 */
+	private static function consume_pending_add_to_cart() {
+		$pending = array_filter(
+			self::pop_pending_add_to_cart(),
+			function ( $event ) {
+				return is_array( $event ) && empty( $event['ajax'] );
+			}
+		);
+		return ! empty( $pending ) ? end( $pending ) : null;
+	}
+
+	/**
+	 * Expose pending AddToCart events inside the AJAX fragments payload,
+	 * read by the `added_to_cart` jQuery listener.
+	 * The key is not a valid DOM selector match, so WooCommerce ignores it when replacing fragments.
+	 *
+	 * @param array $fragments Cart fragments.
+	 * @return array
+	 */
+	public static function inject_add_to_cart_fragment( $fragments ) {
+		$pending = self::pop_pending_add_to_cart();
+		if ( ! empty( $pending ) ) {
+			$fragments['wfbt_atc'] = array_values( $pending );
+		}
+		return $fragments;
 	}
 
 	/**
@@ -440,24 +587,50 @@ class Public_Handler {
 					wfbtSyncCheckoutFields();
 				});
 
-				// 3. Listen to WooCommerce AJAX AddToCart
-				jQuery(document.body).on('added_to_cart', function(event, fragments, cart_hash, button) {
-					if (typeof window.fbq === 'function') {
-						var productId = '';
-						var qty = 1;
-						if (button && button.length) {
-							productId = button.data('product_id') ? String(button.data('product_id')) : '';
-							if (button.data('quantity')) {
-								qty = parseFloat(button.data('quantity')) || 1;
-							}
-						}
-
-						window.fbq('track', 'AddToCart', {
-							content_type: 'product',
-							content_ids: productId ? [productId] : [],
-							currency: <?php echo wp_json_encode( esc_attr( $currency ) ); ?>
-						});
+				// 3. Listen to WooCommerce AJAX AddToCart (archive buttons, Cart Drawers, theme AJAX single add-to-cart)
+				var wfbtIdFormat = <?php echo wp_json_encode( Product_Id::get_format() ); ?>;
+				function wfbtFormatId(id, sku) {
+					id = id ? String(id) : '';
+					sku = sku ? String(sku) : '';
+					if (!id && !sku) return '';
+					switch (wfbtIdFormat) {
+						case 'id': return id;
+						case 'gla': return id ? 'gla_' + id : '';
+						case 'fb_wc': return sku ? sku + '_' + id : 'wc_post_id_' + id;
+						default: return sku || id;
 					}
+				}
+
+				jQuery(document.body).on('added_to_cart', function(event, fragments, cart_hash, button) {
+					if (typeof window.fbq !== 'function') return;
+
+					// Preferred: server-built payload queued by woocommerce_add_to_cart (exact variation, price, catalog ID).
+					if (fragments && fragments.wfbt_atc && fragments.wfbt_atc.length) {
+						for (var k = 0; k < fragments.wfbt_atc.length; k++) {
+							var atc = fragments.wfbt_atc[k];
+							window.fbq('track', 'AddToCart', atc.params, atc.options || {});
+						}
+						return;
+					}
+
+					// Fallback: theme handler without fragments, rebuild from the button data attributes.
+					var productId = '';
+					var sku = '';
+					var qty = 1;
+					if (button && button.length) {
+						productId = button.data('product_id') || button.val() || '';
+						sku = button.data('product_sku') || '';
+						qty = parseFloat(button.data('quantity')) || 1;
+					}
+					var cid = wfbtFormatId(productId, sku);
+					if (!cid) return;
+
+					window.fbq('track', 'AddToCart', {
+						content_type: 'product',
+						content_ids: [cid],
+						contents: [{ id: cid, quantity: qty }],
+						currency: <?php echo wp_json_encode( esc_attr( $currency ) ); ?>
+					});
 				});
 			}
 		})();

@@ -69,6 +69,15 @@ class Admin_Settings {
 		register_setting( 'wfbt_settings_group', 'wfbt_trigger_statuses' );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_alerts', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_alert_email', array( 'sanitize_callback' => 'sanitize_email' ) );
+		register_setting(
+			'wfbt_settings_group',
+			Product_Id::OPTION,
+			array(
+				'sanitize_callback' => function ( $value ) {
+					return array_key_exists( $value, Product_Id::get_formats() ) ? $value : 'sku';
+				},
+			)
+		);
 	}
 
 	/**
@@ -355,6 +364,21 @@ class Admin_Settings {
 							<strong><?php esc_html_e( 'Enable live floating debug bar for administrators', 'wfbt-server-side' ); ?></strong>
 						</label>
 						<p class="description"><?php esc_html_e( 'Displays an expandable tracking inspector at the bottom-right of your store pages when logged in as admin or store manager. Allows you to verify fbq event triggers, Concord consent, and _fbp/_fbc cookies in real-time. Completely invisible to regular shoppers.', 'wfbt-server-side' ); ?></p>
+					</td>
+				</tr>
+				<tr valign="top">
+					<th scope="row"><?php esc_html_e( 'Catalog Content ID format', 'wfbt-server-side' ); ?></th>
+					<td>
+						<?php $current_format = Product_Id::get_format(); ?>
+						<select name="<?php echo esc_attr( Product_Id::OPTION ); ?>">
+							<?php foreach ( Product_Id::get_formats() as $format_key => $format_label ) : ?>
+								<option value="<?php echo esc_attr( $format_key ); ?>" <?php selected( $current_format, $format_key ); ?>><?php echo esc_html( $format_label ); ?></option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'The content_ids sent with ViewContent, AddToCart, InitiateCheckout and Purchase (Pixel + CAPI) must be strictly identical to the "Content ID" column of your Meta catalog (Commerce Manager > Catalog > Items). Otherwise Meta reports a 0% catalog match rate and catalog ads cannot work.', 'wfbt-server-side' ); ?></p>
+						<?php if ( 'gla' !== $current_format && ( defined( 'WC_GLA_VERSION' ) || class_exists( '\Automattic\WooCommerce\GoogleListingsAndAds\PluginFactory' ) ) ) : ?>
+							<p class="description" style="color: #b26200;"><?php esc_html_e( 'Google for WooCommerce is active: if your Meta catalog is imported from Google Merchant Center, its IDs probably use the "gla_1234" format.', 'wfbt-server-side' ); ?></p>
+						<?php endif; ?>
 					</td>
 				</tr>
 			</table>

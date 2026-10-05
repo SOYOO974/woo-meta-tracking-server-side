@@ -318,12 +318,15 @@ class Meta_Api {
 	 * @return array The custom data.
 	 */
 	private function extract_custom_data( $order ) {
-		$contents = array();
+		$contents    = array();
+		$content_ids = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
 			$product = $item->get_product();
 			if ( $product ) {
-				$contents[] = array(
-					'id'         => (string) ( $product->get_sku() ? $product->get_sku() : $product->get_id() ),
+				$cid           = Product_Id::get( $product );
+				$content_ids[] = $cid;
+				$contents[]    = array(
+					'id'         => $cid,
 					'quantity'   => (int) $item->get_quantity(),
 					'item_price' => (float) $order->get_item_total( $item, false, false ),
 				);
@@ -333,6 +336,7 @@ class Meta_Api {
 		return array(
 			'currency'     => $order->get_currency(),
 			'value'        => (float) $order->get_total(),
+			'content_ids'  => array_values( array_unique( $content_ids ) ),
 			'contents'     => $contents,
 			'content_type' => 'product',
 			'num_items'    => (int) $order->get_item_count(),

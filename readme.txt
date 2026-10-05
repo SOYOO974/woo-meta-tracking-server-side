@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.0.9
+Stable tag: 2.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,12 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.1.0 =
+* **AddToCart fiable sur toutes les pages** : capture serveur via le hook `woocommerce_add_to_cart` (formulaire classique des fiches produits, wc-ajax, admin-ajax des thèmes type Woodmart). L'événement est restitué via les fragments AJAX ou au rechargement de page, avec la variation exacte, la quantité et la valeur.
+* **Correspondance catalogue Meta** : nouveau réglage « Format des Content ID » (SKU, ID produit, gla_ID Google for WooCommerce, format Facebook for WooCommerce) appliqué de façon identique à ViewContent, AddToCart, InitiateCheckout et Purchase (Pixel + CAPI). Corrige le taux de correspondance catalogue à 0 %.
+* **ViewContent produits variables** : envoi des ID de variations (les articles réels du catalogue) et du tableau `contents`.
+* **Purchase** : ajout de `content_ids` côté Pixel et CAPI.
 
 = 2.0.9 =
 * **Désactivation par Défaut de la Barre de Débogage** : L'option « Activer la barre de débogage flottante pour les administrateurs » (`wfbt_enable_debug_bar`) est désormais décochée par défaut pour garantir une interface front-end nette et sans pastille intrusive lors de la navigation des administrateurs.

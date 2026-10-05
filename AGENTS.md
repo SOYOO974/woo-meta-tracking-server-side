@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.0.9)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.1.0)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -35,6 +35,7 @@ woo-fb-tracking-server-side/
 ├── includes/
 │   ├── class-wfbt-core.php                 # Orchestration, hooks de commande, planification HPOS
 │   ├── class-wfbt-meta-api.php             # Moteur CAPI Graph API v21.0, normalisation E.164, payload
+│   ├── class-wfbt-product-id.php           # Résolveur unique des content_ids alignés sur le catalogue Meta
 │   ├── class-wfbt-background-processor.php # File d'attente asynchrone WooCommerce Action Scheduler
 │   ├── class-wfbt-admin-settings.php       # Panneau de réglages & tableau de diagnostic des 20 commandes
 │   └── class-wfbt-logger.php               # Wrapper WC_Logger ('wfbt-server-side')
@@ -83,7 +84,8 @@ woo-fb-tracking-server-side/
     - Tableau d'audit HPOS des 20 dernières commandes avec détection en temps réel de `_fbp`, `_fbc`, badge de consentement et bouton « Renvoyer ».
   - Onglet Tutoriel & Guide de configuration : 8 étapes structurées sous forme d'accordéon repliable (fermé par défaut) avec boutons « Tout déplier / Tout replier ». Détaille exhaustivement le paramétrage Meta (choix exclusif de l'événement Acheter, matrice exacte des cases à cocher client/événement, génération du token Dataset Quality API, test en direct et Pixel Helper).
 - **[public/class-wfbt-public.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/public/class-wfbt-public.php)** :
-  - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (AJAX WooCommerce `added_to_cart`), `InitiateCheckout` et `Purchase`.
+  - Injection front du script `fbevents.js` et déclenchement des événements `PageView`, `ViewContent`, `AddToCart` (capture serveur `woocommerce_add_to_cart` + fragments AJAX, voir §3), `InitiateCheckout` et `Purchase`.
+  - `ViewContent` sur produit variable : envoi des content_ids des variations visibles (max 50), car le catalogue Meta référence les variations et non le parent.
   - Instrumentation non intrusive du Pixel `window.fbq` pour journaliser tous les appels dans `window.wfbtEventsLog`.
   - Barre de débogage flottante en direct (`maybe_render_debug_bar`) pour administrateurs et gestionnaires de boutique (`manage_woocommerce`, `manage_options`, ou `?wfbt_debug=1`) : pastille repliable en bas à droite inspectant l'état du Pixel, le consentement marketing avec sa source (`GRANTED (woo_gads)`, `GRANTED (concord)`), `_fbp`, `_fbc`, `?fbclid=`, le flux temps réel de tous les événements `fbq` avec paramètres et boutons d'actions rapides.
   - Détection du consentement en cascade : Priorité 1 au cookie `woo_gads_consent` (avec parsing JSON), Priorité 2 au cookie Concord ou préfixe personnalisé, et objet global `window.ConcordConsent`.
@@ -91,6 +93,9 @@ woo-fb-tracking-server-side/
   - Capture PHP native `detect_consent_php()` (avec alias rétrocompatible `detect_concord_consent_php()`).
   - Capture de `?fbclid=` en cookie first-party `wfbt_fbclid` (90 jours) + `localStorage`.
   - Injection de champs masqués au checkout pour sauvegarder `_wfbt_fbp`, `_wfbt_fbc` et `_wfbt_consent`.
+- **[includes/class-wfbt-product-id.php](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/includes/class-wfbt-product-id.php)** (v2.1.0) :
+  - Source unique des `content_ids` / `contents[].id` (Pixel ET CAPI). Option `wfbt_content_id_format` : `sku` (défaut, SKU sinon ID — identique à Woo Merchant Sync SOYOO), `id`, `gla` (`gla_{id}`, Google for WooCommerce / import GMC), `fb_wc` (`{sku}_{id}` ou `wc_post_id_{id}`). Filtre `wfbt_content_id` pour les formats sur-mesure.
+  - **Règle absolue** : ces ID doivent être identiques à la colonne « ID de contenu » du catalogue Meta, sinon taux de correspondance catalogue = 0 % (ViewContent/AddToCart/Purchase « Manquant » dans le Gestionnaire des ventes).
 
 ---
 
@@ -103,7 +108,9 @@ woo-fb-tracking-server-side/
    - Le Pixel s'initialise (`fbq('init', pixel_id)`).
    - Meta dépose ses propres cookies first-party `_fbp` (Browser ID) et `_fbc` (Click ID).
    - L'événement `PageView` est envoyé, ainsi que l'événement spécifique de la page consultée (`ViewContent` ou `InitiateCheckout`).
-4. Lors de l'ajout au panier, l'écouteur jQuery `added_to_cart` intercepte les ajouts AJAX (compatible tiroirs paniers / Cart Drawers) et déclenche `fbq('track', 'AddToCart', ...)`.
+4. Lors de l'ajout au panier (v2.1.0), le hook serveur `woocommerce_add_to_cart` (enregistré AVANT le garde `is_admin()` pour couvrir `admin-ajax.php`) construit le payload `AddToCart` (variation exacte, quantité, valeur, content_id catalogue) et le place dans la session WC (`wfbt_pending_atc`, flag `ajax`) :
+   - **Ajout AJAX** (wc-ajax, Woodmart, Cart Drawers) : le filtre `woocommerce_add_to_cart_fragments` expose les événements sous la clé `fragments.wfbt_atc`, lus par l'écouteur jQuery `added_to_cart`. Repli JS sur les attributs `data-product_id` / `data-product_sku` si le thème ne renvoie pas de fragments.
+   - **Formulaire classique** (fiche produit POST, sans AJAX) : l'événement est injecté dans `wfbt_page_events` au rendu de la page suivante. Les événements flagués `ajax` ne sont jamais rejoués au rechargement (anti-doublon).
 
 ### 2. Validation de Commande & Métadonnées HPOS
 Lors du paiement (`woocommerce_checkout_order_created` / `woocommerce_checkout_update_order_meta`) :
