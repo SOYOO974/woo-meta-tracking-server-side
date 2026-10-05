@@ -8,7 +8,7 @@
 ## 1. Description Générale & Philosophie d'Ingénierie
 
 Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architecture hybride native** ultra-performante et résiliente, combinant :
-1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`.
+1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` capturé côté serveur + fragments AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`. Tous les `content_ids` (Pixel + CAPI) sont résolus par `Product_Id` et alignés automatiquement sur le catalogue Meta `woo-meta-catalog-feed-soyoo`.
 2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
 3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
 4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). Écoute dynamique des événements d'acceptation en direct (bouton `#woo-gads-btn-accept`, événement `woo_gads_consent_updated`, `concord:consent`). En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
@@ -210,11 +210,44 @@ Sur la page `is_order_received_page()` :
 - Sur Windows, la commande native PowerShell `Compress-Archive` enregistre les chemins relatifs avec des antislashs (`\`). Lorsque WordPress décompresse cette archive sur un serveur Linux de production, le système de fichiers n'interprète pas `\` comme un séparateur mais comme un caractère littéral de nom de fichier. Cela crée des fichiers uniques à plat au lieu de dossiers (ex: `woo-fb-tracking-server-side\includes\class-wfbt-core.php`), provoquant la désactivation immédiate de l'extension par WordPress suite à l'absence perçue du fichier d'en-tête racine et la perte d'autorisation 403.
 - Les releases sont désormais obligatoirement assemblées via le module Python standard `zipfile`, garantissant des slashs POSIX (`/`) universels et un dossier racine `woo-fb-tracking-server-side/` strictement conforme au slug déclaré dans PUC.
 
+### I. Alignement des Content ID avec le Catalogue Meta (v2.1.0)
+- **Le catalogue est la source de vérité.** Sur les sites SOYOO, le catalogue Meta est alimenté par `woo-meta-catalog-feed-soyoo` (`/feed/meta-catalog.xml`, `<g:id>` = SKU sinon ID produit, variations exportées individuellement avec `item_group_id` = ID parent).
+- **Sens unique, jamais de lecture croisée des options** : le tracking consomme l'ID du flux (filtre `soyoo_meta_catalog_content_id`), le flux ne fait qu'afficher un statut en lisant `\WFBT\Product_Id`. Une double lecture d'options crée une dépendance circulaire qui dérive silencieusement.
+- **Rétrocompatibilité** : flux ≤ v1.2.0 sans filtre → le mode `auto` applique la logique historique du flux (SKU sinon ID). Aucun changement d'ID pour les sites existants.
+- **Interdit** : modifier la logique d'ID dans `Public_Handler` ou `Meta_Api` en dur. Toute évolution passe par `Product_Id::get()`.
+- **Piège variations** : `get_sku()` (contexte `view`) d'une variation sans SKU propre renvoie le SKU du parent → plusieurs variations partagent le même ID (doublons rejetés par Meta). Correctif prévu côté flux (v1.3.0, `get_sku( 'edit' )` + repli ID variation) ; le tracking suivra automatiquement via la délégation.
+
+### J. Capture AddToCart : Pièges Rencontrés (v2.1.0)
+- **Fiches produits en POST classique** : de nombreux thèmes (dont Woodmart sur comptoirdecambaie.re) soumettent le formulaire `form.cart` sans AJAX → l'événement jQuery `added_to_cart` ne se déclenche jamais. L'ancienne écoute JS seule ratait donc la majorité des ajouts (« Ajout au panier : aucune activité récente » dans Events Manager).
+- **`admin-ajax.php` ⇒ `is_admin() === true`** : les hooks `woocommerce_add_to_cart` et `woocommerce_add_to_cart_fragments` doivent être enregistrés AVANT le garde `is_admin()` de `Public_Handler::init()`, sinon les ajouts AJAX des thèmes ne sont pas capturés.
+- **Anti-doublon** : les événements créés pendant une requête AJAX (`wp_doing_ajax()` / `WC_DOING_AJAX`) portent le flag `ajax` et ne sont jamais rejoués au rendu de page ; ils passent uniquement par `fragments.wfbt_atc` ou le repli JS.
+- **Bouton AJAX des listes** : `data-product_id` = ID WordPress, pas le SKU. Ne jamais l'envoyer brut : toujours formater (`wfbtFormatId`) ou utiliser le payload serveur.
+
+### K. Méthode de Diagnostic « Taux de correspondance catalogue 0 % »
+1. **Distinguer les deux écrans Meta** : *Gestionnaire d'événements* (l'événement arrive-t-il ?) vs *Gestionnaire des ventes > Catalogue > Événements* (l'ID envoyé existe-t-il dans le catalogue ?). Un `ViewContent` « Actif » avec 0 % de correspondance = problème d'ID ou de délai, pas d'envoi.
+2. **Comparer sur preuve, pas sur hypothèse** : relever `wfbt_page_events` dans le HTML d'une fiche produit en ligne et chercher le même ID dans `/feed/meta-catalog.xml` (`<g:id>…</g:id>`). Vérifier aussi que `wfbt_pixel_id` = ID du pixel associé au catalogue.
+3. **Délai Meta** : un catalogue créé récemment reste à 0 % / « Manquant » plusieurs jours (fenêtre de calcul de 28 jours). Ne pas conclure avant 3 à 7 jours après création ou correction.
+4. **Leçon comptoirdecambaie.re (oct. 2026)** : l'hypothèse « IDs `gla_` » (Google for WooCommerce actif) était fausse ; flux et pixel envoyaient bien le SKU (`644013`). Causes réelles : AddToCart absent (POST classique) + catalogue créé le 30/09/2026. Le contrôle d'alignement intégré aux réglages évite désormais ce type de fausse piste.
+
 ---
 
-## 6. 🚀 Procédure de Release & Déploiement
+## 6. 📌 Suivi & Backlog (au 05/10/2026)
+
+| Sujet | État | Action |
+| :--- | :--- | :--- |
+| Release v2.1.0 (AddToCart serveur, `Product_Id`, mode `auto`) | ✅ Publiée sur GitHub (tag `v2.1.0`) | Mise à jour PUC + purge cache sur chaque site |
+| `woo-meta-catalog-feed-soyoo` v1.3.0 (filtre `soyoo_meta_catalog_content_id`, `Feed_Item::get_content_id()`, encadré statut tracking, fix SKU variations) | ⏳ À faire dans la session dédiée du flux | Prompt fourni à Julien |
+| comptoirdecambaie.re : taux de correspondance catalogue | ⏳ À revérifier vers le 08-09/10/2026 | Si toujours 0 % avec AddToCart reçus → reprendre le diagnostic §K |
+| Page de remerciement : `Purchase` rendu pour tout `order-received` sans vérifier `?key=` (fuite du montant d'une commande tierce) | ⚠️ Non corrigé | Ajouter `$order->key_is_valid( $_GET['key'] )` dans `get_page_event_data()` |
+| Traductions fr_FR des nouvelles chaînes v2.1.0 (réglage Content ID, encadré d'alignement) | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
+
+---
+
+## 7. 🚀 Procédure de Release & Déploiement
 
 À chaque fois que vous apportez des modifications fonctionnelles au code du projet et souhaitez publier une nouvelle version stable :
 - **N'effectuez PAS la release manuellement.**
 - Suivez les étapes automatisées du workflow : [`.agent/workflows/agent-releaser.md`](file:///c:/Antigravity/woo-plugins/woo-fb-tracking-server-side/.agent/workflows/agent-releaser.md).
 - Ce workflow s'assure d'incrémenter les versions dans `woo-fb-tracking-server-side.php` et `readme.txt`, de générer l'archive `.zip` propre, de committer, de tagguer et de publier la release officielle via GitHub CLI (`gh`).
+- **Notes de release multilignes** : passer par `gh release create … --notes-file <fichier.md>` (rédigé dans le dossier scratch de l'agent) plutôt que `--notes` : les guillemets et backticks du changelog cassent l'échappement PowerShell.
+- **Après publication** : les sites récupèrent la mise à jour via PUC (cycle ~12 h ou « Vérifier les mises à jour »), puis purge des caches (WP Agent Bridge si installé).

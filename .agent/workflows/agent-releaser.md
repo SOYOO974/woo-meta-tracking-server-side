@@ -38,7 +38,7 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
 
 13. Publier la release sur GitHub avec l'outil GitHub CLI (`gh`) :
     ```bash
-    gh release create v[VERSION] "woo-meta-tracking-server-side.zip" --title "v[VERSION]" --notes "[CHANGELOG]"
+    gh release create v[VERSION] "woo-meta-tracking-server-side.zip" --title "v[VERSION]" --notes-file "<scratch>/release-notes-[VERSION].md"
     ```
     Puis supprimer le zip local temporaire :
     ```powershell
