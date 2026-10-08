@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.1.0)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.1.1)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -8,15 +8,15 @@
 ## 1. Description Générale & Philosophie d'Ingénierie
 
 Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architecture hybride native** ultra-performante et résiliente, combinant :
-1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` capturé côté serveur + fragments AJAX, `InitiateCheckout`) et déclenchement initial de `Purchase`. Tous les `content_ids` (Pixel + CAPI) sont résolus par `Product_Id` et alignés automatiquement sur le catalogue Meta `woo-meta-catalog-feed-soyoo`.
+1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` capturé côté serveur + fragments AJAX + endpoint de repli asynchrone `?wc-ajax=wfbt_pending_atc`, `InitiateCheckout` dédupliqué par `cart_hash`) et déclenchement initial de `Purchase`. Tous les `content_ids` (Pixel + CAPI) sont résolus par `Product_Id` et alignés automatiquement sur le catalogue Meta `woo-meta-catalog-feed-soyoo`.
 2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
-3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
-4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). Écoute dynamique des événements d'acceptation en direct (bouton `#woo-gads-btn-accept`, événement `woo_gads_consent_updated`, `concord:consent`). En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
+3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires. `InitiateCheckout` est quant à lui dédupliqué par session et panier (`cart_hash`).
+4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). File d'attente pré-consentement pour les ajouts au panier rapides (`window.wfbtPendingConsentAtc`) rejouée à l'acceptation. En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
 5. **Garde Pré-Vol CAPI & Anti-Erreur 400** : Vérification stricte de la présence d'au moins un identifiant direct client (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commandes manuelles sans coordonnées), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)`, évitant le code d'erreur Meta 100 / sous-code 2804050 et les alertes email intempestives.
 6. **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()`) pour maximiser la correspondance Meta.
 7. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
 8. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
-9. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin (décochée par défaut dans les réglages pour préserver la navigation, activable à volonté ou à la volée via `?wfbt_debug=1`).
+9. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin avec étiquetage explicite de la source des AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`).
 10. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
@@ -217,11 +217,47 @@ Sur la page `is_order_received_page()` :
 - **Interdit** : modifier la logique d'ID dans `Public_Handler` ou `Meta_Api` en dur. Toute évolution passe par `Product_Id::get()`.
 - **Piège variations** : `get_sku()` (contexte `view`) d'une variation sans SKU propre renvoie le SKU du parent → plusieurs variations partagent le même ID (doublons rejetés par Meta). Correctif prévu côté flux (v1.3.0, `get_sku( 'edit' )` + repli ID variation) ; le tracking suivra automatiquement via la délégation.
 
-### J. Capture AddToCart : Pièges Rencontrés (v2.1.0)
-- **Fiches produits en POST classique** : de nombreux thèmes (dont Woodmart sur comptoirdecambaie.re) soumettent le formulaire `form.cart` sans AJAX → l'événement jQuery `added_to_cart` ne se déclenche jamais. L'ancienne écoute JS seule ratait donc la majorité des ajouts (« Ajout au panier : aucune activité récente » dans Events Manager).
-- **`admin-ajax.php` ⇒ `is_admin() === true`** : les hooks `woocommerce_add_to_cart` et `woocommerce_add_to_cart_fragments` doivent être enregistrés AVANT le garde `is_admin()` de `Public_Handler::init()`, sinon les ajouts AJAX des thèmes ne sont pas capturés.
-- **Anti-doublon** : les événements créés pendant une requête AJAX (`wp_doing_ajax()` / `WC_DOING_AJAX`) portent le flag `ajax` et ne sont jamais rejoués au rendu de page ; ils passent uniquement par `fragments.wfbt_atc` ou le repli JS.
-- **Bouton AJAX des listes** : `data-product_id` = ID WordPress, pas le SKU. Ne jamais l'envoyer brut : toujours formater (`wfbtFormatId`) ou utiliser le payload serveur.
+### J. Capture AddToCart : Autopsie des Pièges & Résolution Multi-Niveaux (v2.1.1)
+
+Lors du déploiement de la v2.1.0 sur `comptoirdecambaie.re` (thème FSE / UnderscoreTW sur-mesure `_cpd`), les statistiques Meta Events Manager montraient une anomalie majeure : **3 AddToCart pour 20 InitiateCheckout et 6 Purchase sur 4 jours**, et **3 AddToCart pour 70 InitiateCheckout sur 28 jours**. L'AddToCart restait massivement sous-déclaré et le ratio était aberrant.
+
+L'autopsie du code thème (`javascript/script.js` et `theme/inc/woocommerce.php`) a révélé 5 causes réelles conjuguées :
+
+1. **Bouton Mobile Sticky (`.mobile-bar [data-mobile-add]`) dépourvu de métadonnées** :
+   - Sur mobile (~95 % du trafic Meta Ads), l'ajout est déclenché par un bouton fixe en bas d'écran : `<button type="button" class="btn btn--accent" data-mobile-add>`. Ce bouton est placé hors du formulaire et ne possède **aucun** attribut `data-product_id`, `data-product_sku`, ni `value`.
+   - Le script du thème intercepte le clic, fait son propre `fetch(cfg.ajaxUrl, ...)` vers `?wc-ajax=add_to_cart`, puis déclenche manuellement jQuery : `$(document.body).trigger('added_to_cart', [ res.fragments, res.cart_hash, $(trigger) ])`.
+   - Si les fragments ne contenaient pas `wfbt_atc` (voir cause 2), le repli DOM lisait `button.data('product_id') || button.val()` qui valait chaîne vide `''`. Le tracking abandonnait silencieusement (`if (!cid) return;`).
+2. **Siphonnage intempestif de la file de session par concurrence de fragments** :
+   - En v2.1.0, `inject_add_to_cart_fragment()` appelait `pop_pending_add_to_cart()` à chaque exécution du filtre `woocommerce_add_to_cart_fragments`.
+   - Or, ce filtre est appelé en permanence par WooCommerce :
+     a) Lors du rafraîchissement au chargement de chaque page via `cart-fragments.js` (`?wc-ajax=get_refreshed_fragments`) ;
+     b) Lors des modifications de quantité ou suppressions dans le panier latéral via `_cpd_wc_cart_fragment_payload()` (`?wc-ajax=cpd_update_cart`).
+   - Si une requête de fragment passive s'exécutait, elle vidait `wfbt_pending_atc` de la session WooCommerce et l'injectait dans une réponse HTTP que le navigateur n'écoutait pas sous `added_to_cart`. L'événement était détruit avant que l'acheteur ne puisse le consommer.
+3. **Produits variables en POST classique et Edge Cache Cloudflare Enterprise (Rocket.net)** :
+   - Sur les produits variables, le thème désactive l'AJAX et repasse en POST classique avec rechargement.
+   - Le serveur enregistrait l'événement dans la session et redirigeait en GET (Post-Redirect-Get).
+   - Mais sur Rocket.net, si la page suivante était servie par le cache Cloudflare Edge (Edge Cache HIT), le HTML statique ne contenait pas l'événement dynamique (`get_page_event_data()` non exécuté). L'événement restait bloqué en session jusqu'à ce qu'un `get_refreshed_fragments` passif vienne le détruire.
+4. **Faux ajouts lors des rafraîchissements programmatiques du tiroir panier** :
+   - Lors d'une modification de quantité (+ / −) ou d'une suppression d'article dans le tiroir (`initCartDrawer`), le thème déclenchait `added_to_cart` avec `programmaticRefresh = true` pour rafraîchir les badges WooCommerce, risquant de créer de faux événements ou de consommer des événements légitimes.
+5. **Sur-comptage d'InitiateCheckout faussant le ratio** :
+   - `InitiateCheckout` était émis à chaque chargement de `/commande/` sans aucun verrou.
+   - Les rechargements de page, les retours depuis Alma ou les passerelles 3DS, et les erreurs de validation de formulaire renvoyaient chacun un `InitiateCheckout` pour le même panier, gonflant le volume à 70 pour seulement ~10 acheteurs réels.
+
+#### 🛡️ Architecture de Résilience Multi-Niveaux (v2.1.1) :
+- **Endpoint de repli serveur dédié `/?wc-ajax=wfbt_pending_atc` (avec repli `admin-ajax.php?action=wfbt_pending_atc`)** :
+  Dès que l'écouteur `added_to_cart` est déclenché côté navigateur et que `fragments.wfbt_atc` est manquant, le script JS interroge immédiatement cet endpoint asynchrone sans cache (`nocache_headers()`). L'endpoint dépile les événements exacts de la session WooCommerce (`Product_Id`, variation, prix TTC, quantité, devise) et les renvoie en JSON.
+- **Protection anti-concurrence `$added_in_current_request`** :
+  `inject_add_to_cart_fragment()` ne touche à la session que si un ajout réel (`woocommerce_add_to_cart`) s'est produit dans la même exécution PHP (`$added_in_current_request === true`). Les rafraîchissements passifs (`get_refreshed_fragments`) et les updates de panier (`cpd_update_cart`) ne peuvent plus jamais vider la file.
+- **Bypass du cache Edge via cookie court `wfbt_has_pending_atc`** :
+  Lors d'un ajout POST, PHP dépose un cookie 60 secondes. Au chargement de la page suivante, même servie à 100 % depuis Cloudflare Edge Cache, le JS détecte le cookie au `DOMContentLoaded`, appelle l'endpoint de repli et déclenche le pixel (`source: 'endpoint_cache_bypass'`).
+- **Filtrage des faux ajouts programmatiques** :
+  L'écouteur `added_to_cart` ignore formellement tout trigger provenant du tiroir (`.cart-drawer`, `.cd-row`, `is-updating`, `.cart-form`).
+- **File d'attente pré-consentement (`window.wfbtPendingConsentAtc`)** :
+  Si l'internaute clique sur "Ajouter" avant d'avoir validé la bannière RGPD, l'événement est conservé en mémoire et rejoué automatiquement à l'initialisation du pixel (`initMetaPixel`).
+- **Déduplication d'`InitiateCheckout` par panier (`cart_hash`)** :
+  L'événement est verrouillé dans `sessionStorage` (`wfbt_ic_tracked_{cart_hash}`). Il ne part qu'une fois par panier, même en cas de rechargement ou de retour Alma/Stripe.
+- **Traçabilité totale des sources d'AddToCart** :
+  Chaque AddToCart est étiqueté (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`) dans `window.wfbtEventsLog` et mis en évidence par un badge coloré dans la barre de débogage flottante admin.
 
 ### K. Méthode de Diagnostic « Taux de correspondance catalogue 0 % »
 1. **Distinguer les deux écrans Meta** : *Gestionnaire d'événements* (l'événement arrive-t-il ?) vs *Gestionnaire des ventes > Catalogue > Événements* (l'ID envoyé existe-t-il dans le catalogue ?). Un `ViewContent` « Actif » avec 0 % de correspondance = problème d'ID ou de délai, pas d'envoi.
@@ -231,15 +267,16 @@ Sur la page `is_order_received_page()` :
 
 ---
 
-## 6. 📌 Suivi & Backlog (au 05/10/2026)
+## 6. 📌 Suivi & Backlog (au 08/10/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
-| Release v2.1.0 (AddToCart serveur, `Product_Id`, mode `auto`) | ✅ Publiée sur GitHub (tag `v2.1.0`) | Mise à jour PUC + purge cache sur chaque site |
+| Release v2.1.1 (Résilience absolue AddToCart multi-chemins, endpoint de repli `?wc-ajax=wfbt_pending_atc`, fix concurrence fragments, bypass cache Edge, déduplication InitiateCheckout) | ✅ Validée & Prête pour Release | Tag GitHub `v2.1.1` + mise à jour PUC sur les sites |
+| Release v2.1.0 (AddToCart serveur, `Product_Id`, mode `auto`) | ✅ Déployée | Supplantée par v2.1.1 |
 | `woo-meta-catalog-feed-soyoo` v1.3.0 (filtre `soyoo_meta_catalog_content_id`, `Feed_Item::get_content_id()`, encadré statut tracking, fix SKU variations) | ⏳ À faire dans la session dédiée du flux | Prompt fourni à Julien |
-| comptoirdecambaie.re : taux de correspondance catalogue | ⏳ À revérifier vers le 08-09/10/2026 | Si toujours 0 % avec AddToCart reçus → reprendre le diagnostic §K |
+| comptoirdecambaie.re : contrôle du ratio AddToCart / InitiateCheckout | ⏳ À contrôler 48h après v2.1.1 | Le ratio doit repasser > 1 |
 | Page de remerciement : `Purchase` rendu pour tout `order-received` sans vérifier `?key=` (fuite du montant d'une commande tierce) | ⚠️ Non corrigé | Ajouter `$order->key_is_valid( $_GET['key'] )` dans `get_page_event_data()` |
-| Traductions fr_FR des nouvelles chaînes v2.1.0 (réglage Content ID, encadré d'alignement) | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
+| Traductions fr_FR des nouvelles chaînes v2.1.0/v2.1.1 | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
 
 ---
 

@@ -12,6 +12,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Public_Handler {
 
 	/**
+	 * Flag indicating if an add-to-cart event occurred during the current HTTP request.
+	 *
+	 * @var bool
+	 */
+	private static $added_in_current_request = false;
+
+	/**
 	 * Initialize Front-End Hooks.
 	 */
 	public static function init() {
@@ -20,6 +27,11 @@ class Public_Handler {
 		// admin-ajax.php where is_admin() returns true.
 		add_action( 'woocommerce_add_to_cart', array( __CLASS__, 'capture_add_to_cart' ), 20, 6 );
 		add_filter( 'woocommerce_add_to_cart_fragments', array( __CLASS__, 'inject_add_to_cart_fragment' ), 99 );
+
+		// Lightweight fallback endpoint returning pending AddToCart events from session.
+		add_action( 'wc_ajax_wfbt_pending_atc', array( __CLASS__, 'ajax_get_pending_add_to_cart' ) );
+		add_action( 'wp_ajax_wfbt_pending_atc', array( __CLASS__, 'ajax_get_pending_add_to_cart' ) );
+		add_action( 'wp_ajax_nopriv_wfbt_pending_atc', array( __CLASS__, 'ajax_get_pending_add_to_cart' ) );
 
 		// Only run on frontend.
 		if ( is_admin() ) {
@@ -144,16 +156,28 @@ class Public_Handler {
 
 				// Instrument fbq to record events for live diagnostics and debug bar
 				window.wfbtEventsLog = window.wfbtEventsLog || [];
+				window.wfbtTrackedAtcEvents = window.wfbtTrackedAtcEvents || {};
+				window.wfbtPendingConsentAtc = window.wfbtPendingConsentAtc || [];
 				var _orig_fbq = window.fbq;
 				window.fbq = function() {
 					var args = Array.prototype.slice.call(arguments);
 					if (args.length) {
+						var resolvedSource = null;
+						if (args[3] && args[3]._wfbt_source) {
+							resolvedSource = args[3]._wfbt_source;
+						} else if (args[2] && args[2]._wfbt_source) {
+							resolvedSource = args[2]._wfbt_source;
+						} else if (window._wfbtLastAtcSource) {
+							resolvedSource = window._wfbtLastAtcSource;
+						}
+
 						window.wfbtEventsLog.push({
 							time: new Date().toLocaleTimeString(),
 							action: args[0],
 							name: args[1],
 							params: args[2] || null,
-							options: args[3] || null
+							options: args[3] || null,
+							source: resolvedSource
 						});
 						if (typeof window.wfbtUpdateDebugBar === 'function') {
 							window.wfbtUpdateDebugBar();
@@ -170,7 +194,7 @@ class Public_Handler {
 				fbq('init', wfbt_pixel_id);
 				fbq('track', 'PageView');
 
-				// Fire contextual page events (ViewContent, InitiateCheckout, Purchase)
+				// Fire contextual page events (ViewContent, InitiateCheckout, Purchase, AddToCart)
 				if (wfbt_page_events && wfbt_page_events.length) {
 					for (var j = 0; j < wfbt_page_events.length; j++) {
 						var ev = wfbt_page_events[j];
@@ -185,10 +209,47 @@ class Public_Handler {
 							} catch(e) {}
 						}
 
+						if (ev.name === 'InitiateCheckout') {
+							// Deduplicate InitiateCheckout on the same cart hash (refresh, back from Alma, validation error)
+							var icHash = (ev.params && ev.params.cart_hash) ? ev.params.cart_hash : (ev.options && ev.options.eventID ? ev.options.eventID : 'default');
+							var icKey = 'wfbt_ic_tracked_' + icHash;
+							try {
+								if (sessionStorage.getItem(icKey)) {
+									continue;
+								}
+								sessionStorage.setItem(icKey, '1');
+							} catch(e) {}
+						}
+
+						if (ev.name === 'AddToCart') {
+							var atcEventId = (ev.options && ev.options.eventID) ? ev.options.eventID : null;
+							if (atcEventId) {
+								if (window.wfbtTrackedAtcEvents[atcEventId]) {
+									continue;
+								}
+								window.wfbtTrackedAtcEvents[atcEventId] = true;
+								try {
+									sessionStorage.setItem('wfbt_atc_' + atcEventId, '1');
+								} catch(e) {}
+							}
+						}
+
+						window._wfbtLastAtcSource = ev.source || (ev.name === 'AddToCart' ? 'page_render' : null);
 						if (ev.options) {
 							fbq('track', ev.name, ev.params, ev.options);
 						} else {
 							fbq('track', ev.name, ev.params);
+						}
+						window._wfbtLastAtcSource = null;
+					}
+				}
+
+				// Flush any AddToCart events queued before consent was granted
+				if (window.wfbtPendingConsentAtc && window.wfbtPendingConsentAtc.length) {
+					while (window.wfbtPendingConsentAtc.length > 0) {
+						var pending = window.wfbtPendingConsentAtc.shift();
+						if (pending && typeof window.wfbtDispatchAtc === 'function') {
+							window.wfbtDispatchAtc(pending.event, pending.source);
 						}
 					}
 				}
@@ -262,7 +323,8 @@ class Public_Handler {
 		// 0. AddToCart captured server-side on a classic (non-AJAX) form submission.
 		$pending_atc = self::consume_pending_add_to_cart();
 		if ( $pending_atc ) {
-			$events[] = $pending_atc;
+			$pending_atc['source'] = 'page_render';
+			$events[]              = $pending_atc;
 		}
 
 		// 1. ViewContent on Single Product
@@ -313,15 +375,21 @@ class Public_Handler {
 					}
 				}
 
+				$cart_hash = WC()->cart->get_cart_hash();
+
 				$events[] = array(
-					'name'   => 'InitiateCheckout',
-					'params' => array(
+					'name'    => 'InitiateCheckout',
+					'params'  => array(
 						'content_type' => 'product',
 						'content_ids'  => $content_ids,
 						'contents'     => $contents,
 						'value'        => (float) WC()->cart->get_total( 'edit' ),
 						'currency'     => $currency,
 						'num_items'    => (int) WC()->cart->get_cart_contents_count(),
+						'cart_hash'    => $cart_hash,
+					),
+					'options' => array(
+						'eventID' => 'ic_' . substr( md5( $cart_hash . '_' . ( ( WC()->session && method_exists( WC()->session, 'get_customer_id' ) ) ? WC()->session->get_customer_id() : '' ) ), 0, 16 ),
 					),
 				);
 			}
@@ -435,12 +503,22 @@ class Public_Handler {
 			return;
 		}
 
-		$event['ajax'] = wp_doing_ajax() || ( defined( 'WC_DOING_AJAX' ) && WC_DOING_AJAX );
+		self::$added_in_current_request = true;
+		$event['ajax']                  = wp_doing_ajax() || ( defined( 'WC_DOING_AJAX' ) && WC_DOING_AJAX );
 
 		$pending   = WC()->session->get( 'wfbt_pending_atc', array() );
 		$pending   = is_array( $pending ) ? $pending : array();
 		$pending[] = $event;
 		WC()->session->set( 'wfbt_pending_atc', array_slice( $pending, -10 ) );
+
+		// Set a lightweight 60s first-party cookie so that if the subsequent page load is served
+		// by Cloudflare Edge Cache / Rocket.net, the client-side JavaScript detects the pending
+		// server event and fetches it via wc-ajax=wfbt_pending_atc.
+		if ( ! headers_sent() ) {
+			setcookie( 'wfbt_has_pending_atc', '1', time() + 60, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
+		}
+
+		Logger::log( sprintf( 'capture_add_to_cart: queued AddToCart for product #%d (var #%d, qty %s, ajax: %s)', $product_id, $variation_id, $quantity, $event['ajax'] ? 'yes' : 'no' ) );
 	}
 
 	/**
@@ -464,7 +542,7 @@ class Public_Handler {
 	 * Consume the most recent pending AddToCart event for a full page render
 	 * (classic non-AJAX "Add to cart" form submission on single product pages).
 	 * AJAX-originated events are discarded here: they are delivered via fragments
-	 * or by the JS fallback, never replayed on page load (no duplicates).
+	 * or by the fallback endpoint, never replayed on page load (no duplicates).
 	 *
 	 * @return array|null
 	 */
@@ -475,33 +553,93 @@ class Public_Handler {
 				return is_array( $event ) && empty( $event['ajax'] );
 			}
 		);
-		return ! empty( $pending ) ? end( $pending ) : null;
+		$event = ! empty( $pending ) ? end( $pending ) : null;
+		if ( $event && ! headers_sent() ) {
+			setcookie( 'wfbt_has_pending_atc', '', time() - 3600, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
+		}
+		return $event;
 	}
 
 	/**
 	 * Expose pending AddToCart events inside the AJAX fragments payload,
 	 * read by the `added_to_cart` jQuery listener.
-	 * The key is not a valid DOM selector match, so WooCommerce ignores it when replacing fragments.
+	 *
+	 * Crucial safety guard: only pop pending events if an addition actually occurred
+	 * during this exact request ($added_in_current_request). This prevents passive
+	 * fragment refreshes (e.g. cart-fragments.js at page load or in-drawer line edits)
+	 * from accidentally wiping the queue before the legitimate response consumes it.
 	 *
 	 * @param array $fragments Cart fragments.
 	 * @return array
 	 */
 	public static function inject_add_to_cart_fragment( $fragments ) {
+		if ( ! self::$added_in_current_request ) {
+			return $fragments;
+		}
+
 		$pending = self::pop_pending_add_to_cart();
 		if ( ! empty( $pending ) ) {
 			$fragments['wfbt_atc'] = array_values( $pending );
+			if ( ! headers_sent() ) {
+				setcookie( 'wfbt_has_pending_atc', '', time() - 3600, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
+			}
+			Logger::log( 'inject_add_to_cart_fragment: injected ' . count( $pending ) . ' AddToCart event(s) in fragments' );
 		}
 		return $fragments;
+	}
+
+	/**
+	 * Dedicated fallback AJAX endpoint returning pending AddToCart events from the session.
+	 * Reached at `?wc-ajax=wfbt_pending_atc` or `admin-ajax.php?action=wfbt_pending_atc`.
+	 */
+	public static function ajax_get_pending_add_to_cart() {
+		nocache_headers();
+
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			wp_send_json(
+				array(
+					'success' => false,
+					'events'  => array(),
+					'reason'  => 'no_session',
+				)
+			);
+		}
+
+		$pending = self::pop_pending_add_to_cart();
+
+		// Clear helper cookie if present.
+		if ( ! headers_sent() ) {
+			setcookie( 'wfbt_has_pending_atc', '', time() - 3600, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
+		}
+
+		if ( ! empty( $pending ) ) {
+			Logger::log( 'ajax_get_pending_add_to_cart: returned and popped ' . count( $pending ) . ' event(s)' );
+		}
+
+		wp_send_json(
+			array(
+				'success' => true,
+				'events'  => array_values( $pending ),
+			)
+		);
 	}
 
 	/**
 	 * Render footer scripts: fbclid capture, AJAX AddToCart listener, and checkout hidden field population.
 	 */
 	public static function render_footer_scripts() {
-		$currency = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'EUR';
+		$currency     = function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'EUR';
+		$endpoint_url = function_exists( 'WC_AJAX' ) ? \WC_AJAX::get_endpoint( 'wfbt_pending_atc' ) : admin_url( 'admin-ajax.php?action=wfbt_pending_atc' );
 		?>
 		<script type="text/javascript">
 		(function() {
+			var wfbtEndpointUrl = <?php echo wp_json_encode( esc_url_raw( $endpoint_url ) ); ?>;
+			var wfbtCurrency    = <?php echo wp_json_encode( esc_attr( $currency ) ); ?>;
+
+			// Global registries
+			window.wfbtTrackedAtcEvents = window.wfbtTrackedAtcEvents || {};
+			window.wfbtPendingConsentAtc = window.wfbtPendingConsentAtc || [];
+
 			// 1. Capture fbclid from URL and store in first-party cookie + localStorage
 			try {
 				var urlParams = new URLSearchParams(window.location.search);
@@ -521,6 +659,10 @@ class Public_Handler {
 			function wfbtGetCookie(name) {
 				var matches = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
 				return matches ? decodeURIComponent(matches[1]) : '';
+			}
+
+			function wfbtClearPendingAtcCookie() {
+				document.cookie = 'wfbt_has_pending_atc=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 			}
 
 			// Helper to resolve canonical fbc
@@ -586,51 +728,169 @@ class Public_Handler {
 				jQuery(document.body).on('checkout_place_order', function() {
 					wfbtSyncCheckoutFields();
 				});
+			}
 
-				// 3. Listen to WooCommerce AJAX AddToCart (archive buttons, Cart Drawers, theme AJAX single add-to-cart)
-				var wfbtIdFormat = <?php echo wp_json_encode( Product_Id::get_effective_format() ); ?>;
-				function wfbtFormatId(id, sku) {
-					id = id ? String(id) : '';
-					sku = sku ? String(sku) : '';
-					if (!id && !sku) return '';
-					switch (wfbtIdFormat) {
-						case 'id': return id;
-						case 'gla': return id ? 'gla_' + id : '';
-						case 'fb_wc': return sku ? sku + '_' + id : 'wc_post_id_' + id;
-						default: return sku || id;
+			// 3. Centralized Dispatcher for AddToCart Events
+			function wfbtDispatchAtc(atcEvent, source) {
+				if (!atcEvent || !atcEvent.params) return;
+
+				var eventId = (atcEvent.options && atcEvent.options.eventID) ? atcEvent.options.eventID : null;
+				if (eventId) {
+					if (window.wfbtTrackedAtcEvents[eventId]) {
+						return; // Anti-duplicate: already tracked in this session
+					}
+					window.wfbtTrackedAtcEvents[eventId] = true;
+					try {
+						sessionStorage.setItem('wfbt_atc_' + eventId, '1');
+					} catch(e) {}
+				}
+
+				var hasConsent = (typeof window.wfbtHasMarketingConsent === 'function') ? window.wfbtHasMarketingConsent() : false;
+				var hasFbq     = (typeof window.fbq === 'function');
+
+				if (!hasConsent || !hasFbq) {
+					// Queue until consent is granted / pixel initialized
+					window.wfbtPendingConsentAtc.push({ event: atcEvent, source: source });
+					return;
+				}
+
+				window._wfbtLastAtcSource = source || 'unknown';
+				if (atcEvent.options) {
+					window.fbq('track', 'AddToCart', atcEvent.params, atcEvent.options);
+				} else {
+					window.fbq('track', 'AddToCart', atcEvent.params);
+				}
+				window._wfbtLastAtcSource = null;
+			}
+			window.wfbtDispatchAtc = wfbtDispatchAtc;
+
+			// 4. Fetch pending AddToCart from dedicated lightweight server endpoint
+			function wfbtFetchPendingAtcEndpoint(source, fallbackButton) {
+				if (!window.fetch || !wfbtEndpointUrl) {
+					if (fallbackButton) wfbtFallbackAtcFromDom(fallbackButton);
+					return;
+				}
+
+				fetch(wfbtEndpointUrl, {
+					method: 'GET',
+					credentials: 'same-origin',
+					headers: { 'X-Requested-With': 'XMLHttpRequest' }
+				})
+				.then(function(r) { return r.json(); })
+				.then(function(res) {
+					wfbtClearPendingAtcCookie();
+					if (res && res.success && res.events && res.events.length) {
+						for (var m = 0; m < res.events.length; m++) {
+							wfbtDispatchAtc(res.events[m], source || 'endpoint');
+						}
+					} else if (fallbackButton) {
+						wfbtFallbackAtcFromDom(fallbackButton);
+					}
+				})
+				.catch(function() {
+					wfbtClearPendingAtcCookie();
+					if (fallbackButton) {
+						wfbtFallbackAtcFromDom(fallbackButton);
+					}
+				});
+			}
+
+			// 5. Check if a non-AJAX POST AddToCart is waiting in session (e.g. cached page render)
+			function wfbtCheckPendingAtcFromCookie() {
+				if (wfbtGetCookie('wfbt_has_pending_atc') === '1') {
+					wfbtFetchPendingAtcEndpoint('endpoint_cache_bypass');
+				}
+			}
+			if (document.readyState === 'loading') {
+				document.addEventListener('DOMContentLoaded', wfbtCheckPendingAtcFromCookie);
+			} else {
+				wfbtCheckPendingAtcFromCookie();
+			}
+
+			// 6. DOM Fallback Formatter & Extractor
+			var wfbtIdFormat = <?php echo wp_json_encode( Product_Id::get_effective_format() ); ?>;
+			function wfbtFormatId(id, sku) {
+				id = id ? String(id) : '';
+				sku = sku ? String(sku) : '';
+				if (!id && !sku) return '';
+				switch (wfbtIdFormat) {
+					case 'id': return id;
+					case 'gla': return id ? 'gla_' + id : '';
+					case 'fb_wc': return sku ? sku + '_' + id : 'wc_post_id_' + id;
+					default: return sku || id;
+				}
+			}
+
+			function wfbtFallbackAtcFromDom(button) {
+				if (!button) return;
+				var $btn = window.jQuery ? window.jQuery(button) : null;
+				if (!$btn || !$btn.length) return;
+
+				// Discard programmatic cart updates (mini-cart drawer edits, line removals)
+				if ($btn.hasClass('cart-drawer') || $btn.closest('.cart-drawer, .cd-row, .cart-form').length || $btn.hasClass('is-updating')) {
+					return;
+				}
+
+				var productId = $btn.data('product_id') || $btn.val() || '';
+				var sku       = $btn.data('product_sku') || '';
+				var qty       = parseFloat($btn.data('quantity')) || 1;
+
+				// If button has no ID (e.g. theme mobile bar button), look up parent product form
+				if (!productId && window.jQuery) {
+					var $form = $btn.closest('form.cart');
+					if (!$form.length) {
+						$form = window.jQuery('.pdp form.cart, form.cart');
+					}
+					if ($form.length) {
+						var $formBtn = $form.find('[name="add-to-cart"]');
+						productId = $formBtn.val() || $formBtn.data('product_id') || '';
+						var $qtyInput = $form.find('input.qty, [name="quantity"]');
+						if ($qtyInput.length) {
+							qty = parseFloat($qtyInput.val()) || qty;
+						}
 					}
 				}
 
-				jQuery(document.body).on('added_to_cart', function(event, fragments, cart_hash, button) {
-					if (typeof window.fbq !== 'function') return;
+				var cid = wfbtFormatId(productId, sku);
+				if (!cid) return;
 
-					// Preferred: server-built payload queued by woocommerce_add_to_cart (exact variation, price, catalog ID).
-					if (fragments && fragments.wfbt_atc && fragments.wfbt_atc.length) {
-						for (var k = 0; k < fragments.wfbt_atc.length; k++) {
-							var atc = fragments.wfbt_atc[k];
-							window.fbq('track', 'AddToCart', atc.params, atc.options || {});
-						}
-						return;
-					}
-
-					// Fallback: theme handler without fragments, rebuild from the button data attributes.
-					var productId = '';
-					var sku = '';
-					var qty = 1;
-					if (button && button.length) {
-						productId = button.data('product_id') || button.val() || '';
-						sku = button.data('product_sku') || '';
-						qty = parseFloat(button.data('quantity')) || 1;
-					}
-					var cid = wfbtFormatId(productId, sku);
-					if (!cid) return;
-
-					window.fbq('track', 'AddToCart', {
+				var domEvent = {
+					name: 'AddToCart',
+					params: {
 						content_type: 'product',
 						content_ids: [cid],
 						contents: [{ id: cid, quantity: qty }],
-						currency: <?php echo wp_json_encode( esc_attr( $currency ) ); ?>
-					});
+						currency: wfbtCurrency
+					},
+					options: {
+						eventID: 'atc_dom_' + Date.now() + '_' + Math.floor(Math.random() * 10000)
+					}
+				};
+
+				wfbtDispatchAtc(domEvent, 'dom');
+			}
+
+			// 7. Listen to WooCommerce AJAX AddToCart
+			if (window.jQuery) {
+				jQuery(document.body).on('added_to_cart', function(event, fragments, cart_hash, button) {
+					var $btn = button && button.length ? button : null;
+
+					// Filter out programmatic cart updates (quantity steppers, line removals inside cart drawer / cart page)
+					if ($btn && ($btn.hasClass('cart-drawer') || $btn.closest('.cart-drawer, .cd-row, .cart-form').length || $btn.hasClass('is-updating'))) {
+						return;
+					}
+
+					// Preferred: server-built payload queued by woocommerce_add_to_cart (exact variation, price, catalog ID)
+					if (fragments && fragments.wfbt_atc && fragments.wfbt_atc.length) {
+						for (var k = 0; k < fragments.wfbt_atc.length; k++) {
+							wfbtDispatchAtc(fragments.wfbt_atc[k], 'fragment');
+						}
+						wfbtClearPendingAtcCookie();
+						return;
+					}
+
+					// Fallback: fragments missing wfbt_atc, query the dedicated lightweight server endpoint
+					wfbtFetchPendingAtcEndpoint('endpoint', button);
 				});
 			}
 		})();
@@ -967,10 +1227,11 @@ class Public_Handler {
 						var eventTitle = item.name || item.action || 'Event';
 						var isPurchase = (eventTitle === 'Purchase');
 						var eventIdStr = (item.options && item.options.eventID) ? ' [ID: ' + item.options.eventID + ']' : '';
+						var sourceBadge = item.source ? ' <span style="font-size: 9.5px; background: #e0f2fe; color: #0284c7; padding: 1px 5px; border-radius: 3px; font-weight: 600; text-transform: uppercase;">' + item.source + '</span>' : '';
 						
 						html += '<div style="padding: 5px 0; border-bottom: 1px dotted #dcdcde;">';
-						html += '<div style="display: flex; justify-content: space-between;">';
-						html += '<strong style="color: ' + (isPurchase ? '#008a00' : '#1877f2') + ';">' + eventTitle + eventIdStr + '</strong>';
+						html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
+						html += '<strong style="color: ' + (isPurchase ? '#008a00' : '#1877f2') + ';">' + eventTitle + eventIdStr + sourceBadge + '</strong>';
 						html += '<span style="color: #888; font-size: 10px;">' + item.time + '</span>';
 						html += '</div>';
 						if (item.params) {

@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,16 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.1.1 =
+* **Résilience absolue AddToCart multi-chemins** : Détection et élimination des goulets d'étranglement identifiés sur les thèmes modernes (Comptoir de Cambaie / `_cpd`) avec requêtes fetch custom, boutons sticky mobiles (`mobile-bar`), et modales quick-view.
+* **Endpoint de repli serveur asynchrone (`?wc-ajax=wfbt_pending_atc`)** : Interrogation immédiate de la session WooCommerce dès que les fragments ne transportent pas `wfbt_atc` (thèmes tiers, bypass de fragments), garantissant la restitution de l'événement exact construit côté serveur avec ses content_ids alignés.
+* **Protection anti-concurrence des fragments** : `inject_add_to_cart_fragment()` sanctuarise la file de session en ne consommant les événements que lors d'un ajout réel dans la même requête PHP (`$added_in_current_request`). Neutralise formellement l'aspiration accidentelle de la file par les requêtes passives de rafraîchissement (`cart-fragments.js` / `get_refreshed_fragments`) et les modifications de quantité in-drawer (`cpd_update_cart`).
+* **Bypass du cache Edge (Cloudflare Enterprise / Rocket.net) sur ajouts POST** : Dépôt d'un cookie first-party court `wfbt_has_pending_atc` lors des ajouts classiques avec rechargement (produits variables). Le script JS client détecte le cookie au chargement même si le HTML est servi par le cache Cloudflare Edge et récupère l'événement en attente via l'endpoint dédié.
+* **Filtrage des faux ajouts programmatiques** : Les événements `added_to_cart` déclenchés par les steppers de quantité du tiroir panier (`.cart-drawer`, `.cd-row`, `is-updating`) sont proprement ignorés sans générer de faux signaux.
+* **File d'attente pré-consentement AddToCart** : Si un internaute ajoute un produit au panier avant d'avoir interagi avec la bannière de consentement, l'événement est conservé en mémoire (`wfbtPendingConsentAtc`) et rejoué dès que le consentement est accordé (`initMetaPixel`).
+* **Déduplication stricte d'InitiateCheckout** : Mémorisation du `cart_hash` dans `sessionStorage` (`wfbt_ic_tracked_{cart_hash}`) et passage d'un `eventID` déterministe. Élimine formellement le sur-comptage lors des rechargements de `/commande/`, des retours d'Alma / passerelles 3DS et des erreurs de validation de formulaire.
+* **Traçabilité des sources dans les logs et la barre de débogage** : Étiquetage explicite de la source de chaque événement AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`) consigné dans `window.wfbtEventsLog` et affiché sous forme de badge visuel dans la barre de débogage admin.
 
 = 2.1.0 =
 * **AddToCart fiable sur toutes les pages** : capture serveur via le hook `woocommerce_add_to_cart` (formulaire classique des fiches produits, wc-ajax, admin-ajax des thèmes type Woodmart). L'événement est restitué via les fragments AJAX ou au rechargement de page, avec la variation exacte, la quantité et la valeur.
