@@ -944,10 +944,12 @@ class Public_Handler {
 				sku = sku ? String(sku) : '';
 				if (!id && !sku) return '';
 				switch (wfbtIdFormat) {
-					case 'id': return id;
+					case 'feed':
+					case 'id': return id ? id : sku;
 					case 'gla': return id ? 'gla_' + id : '';
 					case 'fb_wc': return sku ? sku + '_' + id : 'wc_post_id_' + id;
-					default: return sku || id;
+					case 'sku': return sku ? sku : id;
+					default: return id ? id : sku;
 				}
 			}
 

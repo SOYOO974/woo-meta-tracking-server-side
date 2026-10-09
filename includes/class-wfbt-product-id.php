@@ -43,9 +43,9 @@ class Product_Id {
 	 */
 	public static function get_formats() {
 		return array(
-			'auto'  => __( 'Automatic — aligned with Woo Meta Catalog Feed SOYOO (recommended, SKU fallback if not installed)', 'wfbt-server-side' ),
-			'sku'   => __( 'SKU (fallback to Product ID)', 'wfbt-server-side' ),
+			'auto'  => __( 'Automatic — aligned with Woo Meta Catalog Feed SOYOO (recommended, Product ID fallback if not installed)', 'wfbt-server-side' ),
 			'id'    => __( 'WooCommerce Product ID (e.g. 1234)', 'wfbt-server-side' ),
+			'sku'   => __( 'SKU (fallback to Product ID)', 'wfbt-server-side' ),
 			'gla'   => __( 'Google for WooCommerce / Google Listings & Ads (e.g. gla_1234)', 'wfbt-server-side' ),
 			'fb_wc' => __( 'Facebook for WooCommerce (e.g. SKU_1234 or wc_post_id_1234)', 'wfbt-server-side' ),
 		);
@@ -99,7 +99,7 @@ class Product_Id {
 		if ( 'auto' !== $format ) {
 			return $format;
 		}
-		return self::feed_exposes_contract() ? 'feed' : 'sku';
+		return self::feed_exposes_contract() ? 'feed' : 'id';
 	}
 
 	/**
@@ -127,9 +127,9 @@ class Product_Id {
 			}
 		}
 
-		// 2. Static formats (and auto fallback = SKU, the feed historical logic).
+		// 2. Static formats (and auto fallback = Product ID).
 		if ( '' === $content_id ) {
-			$content_id = self::format_static( $product, 'auto' === $format ? 'sku' : $format );
+			$content_id = self::format_static( $product, 'auto' === $format ? 'id' : $format );
 		}
 
 		/**
