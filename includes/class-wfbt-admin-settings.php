@@ -62,6 +62,8 @@ class Admin_Settings {
 		register_setting( 'wfbt_settings_group', 'wfbt_access_token', array( 'sanitize_callback' => 'sanitize_textarea_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_test_code', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_pixel', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'wfbt_settings_group', 'wfbt_enable_capi_atc', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'wfbt_settings_group', 'wfbt_enable_capi_ic', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_debug_bar', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_respect_consent', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_concord_cookie_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -390,6 +392,8 @@ class Admin_Settings {
 	 */
 	private static function render_configuration_tab() {
 		$enable_pixel        = get_option( 'wfbt_enable_pixel', 'yes' );
+		$enable_capi_atc     = get_option( 'wfbt_enable_capi_atc', 'yes' );
+		$enable_capi_ic      = get_option( 'wfbt_enable_capi_ic', 'yes' );
 		$respect_consent     = get_option( 'wfbt_respect_consent', 'yes' );
 		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
 		$trigger_statuses    = get_option( 'wfbt_trigger_statuses', array( 'processing', 'completed' ) );
@@ -436,6 +440,26 @@ class Admin_Settings {
 							<strong><?php esc_html_e( 'Enable client-side tracking (fbq)', 'wfbt-server-side' ); ?></strong>
 						</label>
 						<p class="description"><?php esc_html_e( 'Injects fbevents.js and fires PageView, ViewContent, AddToCart (AJAX), InitiateCheckout, and Purchase with eventID deduplication.', 'wfbt-server-side' ); ?></p>
+					</td>
+				</tr>
+				<tr valign="top">
+					<th scope="row"><?php esc_html_e( 'Server-Side AddToCart (CAPI)', 'wfbt-server-side' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="wfbt_enable_capi_atc" value="yes" <?php checked( $enable_capi_atc, 'yes' ); ?> />
+							<strong><?php esc_html_e( 'Enable server-side AddToCart tracking via Conversions API', 'wfbt-server-side' ); ?></strong>
+						</label>
+						<p class="description"><?php esc_html_e( 'Sends AddToCart events directly to Meta Conversions API via Action Scheduler with the exact same eventID as the browser pixel. Ensures 100% capture of cart additions, even when ad blockers (uBlock), Safari ITP, or network dropouts block browser scripts.', 'wfbt-server-side' ); ?></p>
+					</td>
+				</tr>
+				<tr valign="top">
+					<th scope="row"><?php esc_html_e( 'Server-Side InitiateCheckout (CAPI)', 'wfbt-server-side' ); ?></th>
+					<td>
+						<label>
+							<input type="checkbox" name="wfbt_enable_capi_ic" value="yes" <?php checked( $enable_capi_ic, 'yes' ); ?> />
+							<strong><?php esc_html_e( 'Enable server-side InitiateCheckout tracking via Conversions API', 'wfbt-server-side' ); ?></strong>
+						</label>
+						<p class="description"><?php esc_html_e( 'Sends InitiateCheckout events to Meta Conversions API via Action Scheduler with the exact same eventID as the browser pixel, strictly deduplicated per cart content hash.', 'wfbt-server-side' ); ?></p>
 					</td>
 				</tr>
 				<tr valign="top">
@@ -681,7 +705,17 @@ class Admin_Settings {
 					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
 						<div>HPOS: <strong><?php echo $is_hpos ? esc_html__( 'Active (Native CRUD)', 'wfbt-server-side' ) : esc_html__( 'Legacy PostMeta', 'wfbt-server-side' ); ?></strong></div>
 						<div>Action Scheduler: <strong><?php echo $as_active ? esc_html__( 'Available (Async CAPI)', 'wfbt-server-side' ) : esc_html__( 'Inactive', 'wfbt-server-side' ); ?></strong></div>
-						<div><?php esc_html_e( 'Deduplication key:', 'wfbt-server-side' ); ?> <code>order_{id}</code></div>
+						<div><?php esc_html_e( 'CAPI Server Events:', 'wfbt-server-side' ); ?> <strong><?php
+							$events_list = array( 'Purchase' );
+							if ( 'yes' === get_option( 'wfbt_enable_capi_atc', 'yes' ) ) {
+								$events_list[] = 'AddToCart';
+							}
+							if ( 'yes' === get_option( 'wfbt_enable_capi_ic', 'yes' ) ) {
+								$events_list[] = 'InitiateCheckout';
+							}
+							echo esc_html( implode( ' + ', $events_list ) );
+						?></strong></div>
+						<div><?php esc_html_e( 'Deduplication key:', 'wfbt-server-side' ); ?> <code>order_{id} / atc_* / ic_*</code></div>
 					</div>
 				</div>
 
@@ -702,17 +736,17 @@ class Admin_Settings {
 				<!-- Tile 4: Front-End Debugger -->
 				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 6px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
 					<div style="font-weight: 700; font-size: 13px; color: #1d2327; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-						<span><?php esc_html_e( '4. Front-End Debugger', 'wfbt-server-side' ); ?></span>
+						<span><?php esc_html_e( '4. Tracking & Catalog', 'wfbt-server-side' ); ?></span>
 						<?php if ( 'yes' === $debug_bar ) : ?>
-							<span style="color:#008a00; font-size:11px; background:#e7f7ed; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Enabled', 'wfbt-server-side' ); ?></span>
+							<span style="color:#008a00; font-size:11px; background:#e7f7ed; padding:2px 6px; border-radius:3px;">✓ <?php esc_html_e( 'Debugger On', 'wfbt-server-side' ); ?></span>
 						<?php else : ?>
-							<span style="color:#646970; font-size:11px; background:#f0f0f1; padding:2px 6px; border-radius:3px;"><?php esc_html_e( 'Off', 'wfbt-server-side' ); ?></span>
+							<span style="color:#007cba; font-size:11px; background:#f0f6fc; padding:2px 6px; border-radius:3px;"><?php esc_html_e( 'Active', 'wfbt-server-side' ); ?></span>
 						<?php endif; ?>
 					</div>
 					<div style="font-size: 12px; line-height: 1.8; color: #50575e;">
 						<div><?php esc_html_e( 'Browser Pixel (fbq):', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $enable_pixel ? esc_html__( 'Active', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
-						<div><?php esc_html_e( 'Admin Floating Bar:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $debug_bar ? esc_html__( 'Visible for Admins', 'wfbt-server-side' ) : esc_html__( 'Disabled', 'wfbt-server-side' ); ?></strong></div>
-						<div><?php esc_html_e( 'URL Trigger:', 'wfbt-server-side' ); ?> <code>?wfbt_debug=1</code></div>
+						<div><?php esc_html_e( 'Catalog Format:', 'wfbt-server-side' ); ?> <strong><code><?php echo esc_html( Product_Id::get_format() ); ?></code> (<?php echo esc_html( Product_Id::get_effective_format() ); ?>)</strong></div>
+						<div><?php esc_html_e( 'Debug Bar:', 'wfbt-server-side' ); ?> <strong><?php echo 'yes' === $debug_bar ? esc_html__( 'Visible for Admins', 'wfbt-server-side' ) : esc_html__( 'Off (?wfbt_debug=1)', 'wfbt-server-side' ); ?></strong></div>
 					</div>
 				</div>
 			</div>

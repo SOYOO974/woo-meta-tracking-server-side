@@ -13,9 +13,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Background_Processor {
 
 	/**
-	 * Hook used for the Action Scheduler job.
+	 * Hook used for the Action Scheduler job (orders).
 	 */
 	const ACTION_HOOK = 'wfbt_send_capi_event';
+
+	/**
+	 * Hook used for generic CAPI payloads (AddToCart, InitiateCheckout).
+	 */
+	const ACTION_PAYLOAD_HOOK = 'wfbt_send_capi_payload';
 
 	/**
 	 * Group used in Action Scheduler.
@@ -27,6 +32,7 @@ class Background_Processor {
 	 */
 	public static function init() {
 		add_action( self::ACTION_HOOK, array( __CLASS__, 'process_capi_event' ), 10, 1 );
+		add_action( self::ACTION_PAYLOAD_HOOK, array( __CLASS__, 'process_capi_payload' ), 10, 1 );
 	}
 
 	/**
@@ -48,7 +54,7 @@ class Background_Processor {
 	}
 
 	/**
-	 * Process the CAPI event when triggered by Action Scheduler.
+	 * Process the CAPI event when triggered by Action Scheduler (orders).
 	 *
 	 * @param int $order_id The WooCommerce Order ID.
 	 */
@@ -58,6 +64,43 @@ class Background_Processor {
 		
 		$api = new Meta_Api();
 		$api->send_purchase_event( $order_id );
+	}
+
+	/**
+	 * Schedule a generic CAPI payload (AddToCart, InitiateCheckout, etc.) via Action Scheduler.
+	 * Falls back to synchronous/direct send if Action Scheduler is not loaded.
+	 *
+	 * @param array $payload Event payload.
+	 */
+	public static function schedule_payload( $payload ) {
+		if ( ! is_array( $payload ) || empty( $payload['event_name'] ) ) {
+			return;
+		}
+
+		if ( function_exists( 'as_enqueue_async_action' ) ) {
+			as_enqueue_async_action(
+				self::ACTION_PAYLOAD_HOOK,
+				array( 'payload' => $payload ),
+				self::ACTION_GROUP
+			);
+			Logger::log( sprintf( 'Scheduled CAPI async event [%s] (ID: %s)', $payload['event_name'], isset( $payload['event_id'] ) ? $payload['event_id'] : 'n/a' ) );
+		} else {
+			$api = new Meta_Api();
+			$api->send_capi_payload( $payload );
+		}
+	}
+
+	/**
+	 * Process a generic CAPI payload triggered by Action Scheduler.
+	 *
+	 * @param array $payload Event payload.
+	 */
+	public static function process_capi_payload( $payload ) {
+		if ( ! is_array( $payload ) || empty( $payload['event_name'] ) ) {
+			return;
+		}
+		$api = new Meta_Api();
+		$api->send_capi_payload( $payload );
 	}
 }
 

@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.1.1)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.2.0)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -9,15 +9,20 @@
 
 Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architecture hybride native** ultra-performante et résiliente, combinant :
 1. **Le Pixel Navigateur front-end (`fbq`)** : Capture instantanée du haut de tunnel (`PageView`, `ViewContent`, `AddToCart` capturé côté serveur + fragments AJAX + endpoint de repli asynchrone `?wc-ajax=wfbt_pending_atc`, `InitiateCheckout` dédupliqué par `cart_hash`) et déclenchement initial de `Purchase`. Tous les `content_ids` (Pixel + CAPI) sont résolus par `Product_Id` et alignés automatiquement sur le catalogue Meta `woo-meta-catalog-feed-soyoo`.
-2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'événement `Purchase` via WooCommerce Action Scheduler, totalement insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP Safari iOS).
-3. **Une déduplication parfaite à 100%** : Les événements `Purchase` front-end et serveur partagent strictement le même identifiant : `eventID: 'order_' + order_id`. Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires. `InitiateCheckout` est quant à lui dédupliqué par session et panier (`cart_hash`).
-4. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). File d'attente pré-consentement pour les ajouts au panier rapides (`window.wfbtPendingConsentAtc`) rejouée à l'acceptation. En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
-5. **Garde Pré-Vol CAPI & Anti-Erreur 400** : Vérification stricte de la présence d'au moins un identifiant direct client (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commandes manuelles sans coordonnées), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)`, évitant le code d'erreur Meta 100 / sous-code 2804050 et les alertes email intempestives.
-6. **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()`) pour maximiser la correspondance Meta.
-7. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
-8. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
-9. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin avec étiquetage explicite de la source des AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`).
-10. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
+2. **L'API de Conversions Meta Server-Side (CAPI Graph API v21.0)** : Transmission asynchrone sécurisée de l'ensemble de l'entonnoir transactionnel (`Purchase`, `AddToCart` et `InitiateCheckout`) via WooCommerce Action Scheduler (`Background_Processor::schedule_payload`), totalement insensible aux bloqueurs de publicité (AdBlockers / uBlock), aux pannes réseau et aux restrictions de cookies (ITP Safari iOS).
+3. **Une déduplication parfaite à 100% sur chaque étape** :
+   - `Purchase` : partage strictement le même identifiant : `eventID: 'order_' + order_id`.
+   - `AddToCart` : partage le même identifiant unique généré côté serveur : `eventID: 'atc_' + cart_item_key + '_' + ts`.
+   - `InitiateCheckout` : partage le même identifiant déterministe basé sur le hash du panier : `eventID: 'ic_' + md5(cart_hash + customer_id)`.
+   Meta fusionne les signaux sans doubler les conversions ni le chiffre d'affaires.
+4. **Résilience Anti-Bloqueurs Avancée (`extract_request_user_data`)** : En cas de blocage du Pixel navigateur par un AdBlocker (absence de `_fbp`), le serveur génère et dépose automatiquement un cookie first-party standard `_fbp` (`fb.1.{time}.{rand}`) et résout l'IP client réelle sous Cloudflare Enterprise (`HTTP_CF_CONNECTING_IP`), assurant la validité CAPI sans rejet HTTP 400.
+5. **Conformité RGPD Multi-Bannières (Woo Gads Native + Concord) & Annulation Propre** : Respect absolu du consentement marketing en cascade prioritaire (Priorité 1 : cookie first-party `woo_gads_consent` avec payload JSON `marketing: true|false` ; Priorité 2 : cookie et objet global Concord / préfixes personnalisés). File d'attente pré-consentement persistée dans `sessionStorage` (`wfbt_pending_consent_atc`) pour les ajouts au panier rapides rejouée dès l'acceptation même après changement de page. En cas de refus explicite, annulation propre et sécurisée de la transmission CAPI (`Ignored (Consent Denied)`), protégeant la boutique contre les rejets HTTP 400 de Meta et garantissant la conformité stricte CNIL.
+6. **Garde Pré-Vol CAPI & Anti-Erreur 400** : Vérification stricte de la présence d'au moins un identifiant direct client (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commandes manuelles sans coordonnées), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)`, évitant le code d'erreur Meta 100 / sous-code 2804050 et les alertes email intempestives.
+7. **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()` ou session client) pour maximiser la correspondance Meta.
+8. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
+9. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
+10. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète avec indicateur d'événements CAPI, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin avec étiquetage explicite de la source des AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`).
+11. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
 
@@ -263,20 +268,51 @@ L'autopsie du code thème (`javascript/script.js` et `theme/inc/woocommerce.php`
 1. **Distinguer les deux écrans Meta** : *Gestionnaire d'événements* (l'événement arrive-t-il ?) vs *Gestionnaire des ventes > Catalogue > Événements* (l'ID envoyé existe-t-il dans le catalogue ?). Un `ViewContent` « Actif » avec 0 % de correspondance = problème d'ID ou de délai, pas d'envoi.
 2. **Comparer sur preuve, pas sur hypothèse** : relever `wfbt_page_events` dans le HTML d'une fiche produit en ligne et chercher le même ID dans `/feed/meta-catalog.xml` (`<g:id>…</g:id>`). Vérifier aussi que `wfbt_pixel_id` = ID du pixel associé au catalogue.
 3. **Délai Meta** : un catalogue créé récemment reste à 0 % / « Manquant » plusieurs jours (fenêtre de calcul de 28 jours). Ne pas conclure avant 3 à 7 jours après création ou correction.
-4. **Leçon comptoirdecambaie.re (oct. 2026)** : l'hypothèse « IDs `gla_` » (Google for WooCommerce actif) était fausse ; flux et pixel envoyaient bien le SKU (`644013`). Causes réelles : AddToCart absent (POST classique) + catalogue créé le 30/09/2026. Le contrôle d'alignement intégré aux réglages évite désormais ce type de fausse piste.
+4. **Leçon comptoirdecambaie.re & kidshow.fr (oct. 2026)** : l'alignement des content_ids doit être vérifié dès la configuration du catalogue. Si le catalogue Meta a été importé avec les IDs produits WooCommerce (ex: `10261`), le mode `id` doit être explicitement choisi dans les réglages du plugin (`wfbt_content_id_format = 'id'`).
+
+### L. Architecture Hybride Complète Server-Side & Déduplication 1:1 (v2.2.0)
+
+Dans la version 2.1.1, seul l'événement `Purchase` bénéficiait de la passerelle CAPI Server-Side. `AddToCart`, `InitiateCheckout` et `ViewContent` dépendaient exclusivement du navigateur (`fbevents.js`).
+Sur un site comme `kidshow.fr`, cette asymétrie produisait des anomalies critiques :
+- **Perte massive d'AddToCart** (seulement 2 AddToCart reçus pour 118 InitiateCheckout et 94 Purchase sur 28 jours), causée par :
+  1. Les bloqueurs de publicité (uBlock Origin, AdGuard, Brave Shields) bloquant `fbevents.js` en totalité.
+  2. Les carrousels thèmes personnalisés (ex: `/home-2/`) dont les balises d'ajout utilisent `<a href="?add-to-cart=123">` sans attribut `data-product_id`.
+  3. Les utilisateurs ajoutant au panier avant d'avoir validé le bandeau de consentement, dont la file en mémoire RAM était perdue lors d'une navigation.
+- **Correspondance Catalogue à 0%** : le catalogue Meta 278475902616040 étant indexé sur les Product IDs WooCommerce (`10261`), les événements du plugin envoyaient des SKUs (`couverture-starwars-1-1`) en mode `auto`.
+
+#### 🛡️ Innovations Architecturales Introduites en v2.2.0 :
+1. **Double Passerelle CAPI Asynchrone Action Scheduler (`Background_Processor::schedule_payload`)** :
+   - `capture_add_to_cart()` (hook `woocommerce_add_to_cart`) génère l'événement `AddToCart` et planifie immédiatement l'envoi CAPI via Action Scheduler (`ACTION_PAYLOAD_HOOK`), tout en conservant le payload en session pour les fragments AJAX.
+   - `maybe_send_initiate_checkout_capi()` planifie l'envoi CAPI de `InitiateCheckout` au chargement de `/commande/`, dédupliqué strictement par `cart_hash` pour neutraliser les actualisations ou retours de passerelle.
+   - Les appels réseau vers Meta Graph API v21.0 s'exécutent en tâche de fond asynchrone non-bloquante, préservant 100% du TTFB et de la vitesse perçue de la boutique.
+2. **Déduplication Parfaite 1:1 Browser ⇄ Server** :
+   - Le serveur forge un `eventID` déterministe partagé (`atc_{cart_item_key}_{ts}` pour AddToCart, `ic_{hash}` pour InitiateCheckout, `order_{id}` pour Purchase).
+   - Les deux événements sont envoyés avec ce même identifiant. Meta Events Manager effectue la réconciliation sans sur-comptage.
+3. **Résilience Anti-Bloqueurs Avancée (`extract_request_user_data`)** :
+   - Lorsqu'un AdBlocker bloque le Pixel client, le cookie `_fbp` n'est jamais déposé par Meta.
+   - La méthode `extract_request_user_data()` détecte cette absence et génère automatiquement un identifiant first-party `_fbp` canonique (`fb.1.{time}.{rand}`) déposé en cookie HTTP et injecté dans le payload CAPI.
+   - L'adresse IP réelle est résolue sous Cloudflare Enterprise (`HTTP_CF_CONNECTING_IP`), garantissant un niveau élevé d'Event Match Quality (EMQ) et zéro rejet HTTP 400.
+4. **File Pré-Consentement Persistée (`sessionStorage`)** :
+   - `wfbtDispatchAtc()` persiste la file d'attente pré-consentement dans `sessionStorage.setItem('wfbt_pending_consent_atc')`.
+   - Si le visiteur navigue vers une autre page avant d'accepter les cookies, les ajouts au panier ne sont plus perdus et sont immédiatement dépilés et envoyés dès que le consentement est accordé (`initMetaPixel`).
+5. **Extraction Universelle Regex Thèmes & Carrousels** :
+   - `wfbtFallbackAtcFromDom()` intègre une détection regex des URLs d'ajout au panier `/[?&]add-to-cart=(\d+)/` et `/[?&]quantity=(\d+)/` sur l'attribut `href` des boutons AJAX personnalisés sans `data-product_id`.
+6. **Harmonisation Fine des Catalogues (`Product_Id`)** :
+   - Ajout de `Product_Id::get_view_content_type()` pour attribuer dynamiquement `product` ou `product_group` aux fiches produits variables selon la présence des déclinaisons exportées.
 
 ---
 
-## 6. 📌 Suivi & Backlog (au 08/10/2026)
+## 6. 📌 Suivi & Backlog (au 09/10/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
-| Release v2.1.1 (Résilience absolue AddToCart multi-chemins, endpoint de repli `?wc-ajax=wfbt_pending_atc`, fix concurrence fragments, bypass cache Edge, déduplication InitiateCheckout) | ✅ Validée & Prête pour Release | Tag GitHub `v2.1.1` + mise à jour PUC sur les sites |
-| Release v2.1.0 (AddToCart serveur, `Product_Id`, mode `auto`) | ✅ Déployée | Supplantée par v2.1.1 |
+| Release v2.2.0 (Architecture Hybride Complète CAPI AddToCart + InitiateCheckout, déduplication 1:1, anti-adblocker _fbp auto, pré-consentement sessionStorage, regex href carrousels, Product_Id::get_view_content_type) | ✅ Validée & Prête pour Release | Tag GitHub `v2.2.0` + déploiement production KidShow |
+| KidShow (kidshow.fr) : Configuration du Format Content ID sur "WooCommerce Product ID" | ⏳ À faire en admin | Sélectionner "WooCommerce Product ID (e.g. 1234)" dans réglages |
+| Release v2.1.1 (Résilience AddToCart multi-chemins, endpoint `?wc-ajax=wfbt_pending_atc`) | ✅ Déployée | Supplantée par v2.2.0 |
 | `woo-meta-catalog-feed-soyoo` v1.3.0 (filtre `soyoo_meta_catalog_content_id`, `Feed_Item::get_content_id()`, encadré statut tracking, fix SKU variations) | ⏳ À faire dans la session dédiée du flux | Prompt fourni à Julien |
-| comptoirdecambaie.re : contrôle du ratio AddToCart / InitiateCheckout | ⏳ À contrôler 48h après v2.1.1 | Le ratio doit repasser > 1 |
+| comptoirdecambaie.re : contrôle du ratio AddToCart / InitiateCheckout | ⏳ À contrôler | Le ratio doit repasser > 1 |
 | Page de remerciement : `Purchase` rendu pour tout `order-received` sans vérifier `?key=` (fuite du montant d'une commande tierce) | ⚠️ Non corrigé | Ajouter `$order->key_is_valid( $_GET['key'] )` dans `get_page_event_data()` |
-| Traductions fr_FR des nouvelles chaînes v2.1.0/v2.1.1 | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
+| Traductions fr_FR des nouvelles chaînes v2.2.0 | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
 
 ---
 

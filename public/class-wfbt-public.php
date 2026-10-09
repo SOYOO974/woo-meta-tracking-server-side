@@ -244,12 +244,29 @@ class Public_Handler {
 					}
 				}
 
-				// Flush any AddToCart events queued before consent was granted
+				// Flush any AddToCart events queued before consent was granted (in-memory + sessionStorage)
+				var pendingConsentEvents = [];
 				if (window.wfbtPendingConsentAtc && window.wfbtPendingConsentAtc.length) {
 					while (window.wfbtPendingConsentAtc.length > 0) {
-						var pending = window.wfbtPendingConsentAtc.shift();
-						if (pending && typeof window.wfbtDispatchAtc === 'function') {
-							window.wfbtDispatchAtc(pending.event, pending.source);
+						pendingConsentEvents.push(window.wfbtPendingConsentAtc.shift());
+					}
+				}
+				try {
+					var storedPending = sessionStorage.getItem('wfbt_pending_consent_atc');
+					if (storedPending) {
+						var parsedPending = JSON.parse(storedPending);
+						if (parsedPending && parsedPending.length) {
+							pendingConsentEvents = pendingConsentEvents.concat(parsedPending);
+						}
+						sessionStorage.removeItem('wfbt_pending_consent_atc');
+					}
+				} catch(e) {}
+
+				if (pendingConsentEvents.length) {
+					for (var p = 0; p < pendingConsentEvents.length; p++) {
+						var item = pendingConsentEvents[p];
+						if (item && typeof window.wfbtDispatchAtc === 'function') {
+							window.wfbtDispatchAtc(item.event, item.source);
 						}
 					}
 				}
@@ -334,9 +351,10 @@ class Public_Handler {
 				$product = wc_get_product();
 			}
 			if ( $product ) {
-				$content_ids = Product_Id::get_view_ids( $product );
-				$price       = (float) wc_get_price_to_display( $product );
-				$contents    = array();
+				$content_ids  = Product_Id::get_view_ids( $product );
+				$content_type = Product_Id::get_view_content_type( $product );
+				$price        = (float) wc_get_price_to_display( $product );
+				$contents     = array();
 				foreach ( $content_ids as $cid ) {
 					$contents[] = array(
 						'id'       => $cid,
@@ -349,7 +367,7 @@ class Public_Handler {
 						'content_ids'  => $content_ids,
 						'contents'     => $contents,
 						'content_name' => $product->get_name(),
-						'content_type' => 'product',
+						'content_type' => $content_type,
 						'value'        => $price,
 						'currency'     => $currency,
 					),
@@ -365,7 +383,7 @@ class Public_Handler {
 				foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
 					$product = $cart_item['data'];
 					if ( $product ) {
-						$pid = Product_Id::get( $product );
+						$pid           = Product_Id::get( $product );
 						$content_ids[] = $pid;
 						$contents[]    = array(
 							'id'         => $pid,
@@ -376,6 +394,10 @@ class Public_Handler {
 				}
 
 				$cart_hash = WC()->cart->get_cart_hash();
+				$event_id  = 'ic_' . substr( md5( $cart_hash . '_' . ( ( WC()->session && method_exists( WC()->session, 'get_customer_id' ) ) ? WC()->session->get_customer_id() : '' ) ), 0, 16 );
+
+				// Dispatch CAPI InitiateCheckout if not already sent for this cart hash
+				self::maybe_send_initiate_checkout_capi( $event_id, $cart_hash, $content_ids, $contents, $currency );
 
 				$events[] = array(
 					'name'    => 'InitiateCheckout',
@@ -389,7 +411,7 @@ class Public_Handler {
 						'cart_hash'    => $cart_hash,
 					),
 					'options' => array(
-						'eventID' => 'ic_' . substr( md5( $cart_hash . '_' . ( ( WC()->session && method_exists( WC()->session, 'get_customer_id' ) ) ? WC()->session->get_customer_id() : '' ) ), 0, 16 ),
+						'eventID' => $event_id,
 					),
 				);
 			}
@@ -484,6 +506,7 @@ class Public_Handler {
 	 * Capture every cart addition (classic form POST, wc-ajax, admin-ajax theme handlers)
 	 * and queue the AddToCart event in the WooCommerce session.
 	 * It is then consumed either by the AJAX fragments response or the next page render.
+	 * ALSO sends the AddToCart event via Meta CAPI server-side for hybrid native resilience.
 	 *
 	 * @param string $cart_item_key Cart item key.
 	 * @param int    $product_id    Product ID.
@@ -518,7 +541,111 @@ class Public_Handler {
 			setcookie( 'wfbt_has_pending_atc', '1', time() + 60, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
 		}
 
-		Logger::log( sprintf( 'capture_add_to_cart: queued AddToCart for product #%d (var #%d, qty %s, ajax: %s)', $product_id, $variation_id, $quantity, $event['ajax'] ? 'yes' : 'no' ) );
+		Logger::log( sprintf( 'capture_add_to_cart: queued AddToCart for product #%d (var #%d, qty %s, ajax: %s, eventID: %s)', $product_id, $variation_id, $quantity, $event['ajax'] ? 'yes' : 'no', $event['options']['eventID'] ) );
+
+		// Dispatch CAPI AddToCart event server-side (Hybrid Native with 1:1 deduplication)
+		self::maybe_send_add_to_cart_capi( $event, $product_id, $variation_id );
+	}
+
+	/**
+	 * Send the AddToCart event via Meta Conversions API (CAPI).
+	 * Uses the exact same eventID as the browser-side event for seamless 1:1 deduplication.
+	 *
+	 * @param array $event        Built AddToCart event data.
+	 * @param int   $product_id   Product ID.
+	 * @param int   $variation_id Variation ID (0 if simple).
+	 */
+	private static function maybe_send_add_to_cart_capi( $event, $product_id, $variation_id = 0 ) {
+		if ( 'yes' !== get_option( 'wfbt_enable_capi_atc', 'yes' ) ) {
+			return;
+		}
+
+		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
+		$consent         = self::detect_consent_php();
+
+		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
+			Logger::log( 'AddToCart CAPI: transmission cancelled (GDPR marketing consent denied).' );
+			return;
+		}
+
+		$api       = new Meta_Api();
+		$user_data = $api->extract_request_user_data();
+
+		$product    = wc_get_product( $variation_id ? $variation_id : $product_id );
+		$source_url = wp_get_referer();
+		if ( ! $source_url && ! empty( $_SERVER['HTTP_REFERER'] ) ) {
+			$source_url = esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) );
+		}
+		if ( ! $source_url && $product ) {
+			$source_url = $product->get_permalink();
+		}
+
+		$payload = array(
+			'event_name'       => 'AddToCart',
+			'event_time'       => time(),
+			'action_source'    => 'website',
+			'event_source_url' => $source_url ? $source_url : home_url( '/' ),
+			'event_id'         => $event['options']['eventID'], // Strict deduplication key matching client-side fbq.
+			'user_data'        => $user_data,
+			'custom_data'      => $event['params'],
+		);
+
+		Background_Processor::schedule_payload( $payload );
+	}
+
+	/**
+	 * Send the InitiateCheckout event via Meta Conversions API (CAPI).
+	 * Deduplicated per cart_hash to prevent duplicate events on checkout page interactions.
+	 *
+	 * @param string $event_id    Deduplication eventID matching browser fbq.
+	 * @param string $cart_hash   Cart hash.
+	 * @param array  $content_ids Content IDs.
+	 * @param array  $contents    Contents array.
+	 * @param string $currency    Currency.
+	 */
+	private static function maybe_send_initiate_checkout_capi( $event_id, $cart_hash, $content_ids, $contents, $currency ) {
+		if ( 'yes' !== get_option( 'wfbt_enable_capi_ic', 'yes' ) ) {
+			return;
+		}
+		if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+			return;
+		}
+
+		$sent_key = 'wfbt_capi_ic_sent_' . $cart_hash;
+		if ( 'yes' === WC()->session->get( $sent_key ) ) {
+			return; // Deduplicated: already sent for this exact cart hash.
+		}
+
+		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
+		$consent         = self::detect_consent_php();
+
+		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
+			Logger::log( 'InitiateCheckout CAPI: transmission cancelled (GDPR marketing consent denied).' );
+			return;
+		}
+
+		$api       = new Meta_Api();
+		$user_data = $api->extract_request_user_data();
+
+		$payload = array(
+			'event_name'       => 'InitiateCheckout',
+			'event_time'       => time(),
+			'action_source'    => 'website',
+			'event_source_url' => wc_get_checkout_url(),
+			'event_id'         => $event_id, // Strict deduplication key matching client-side fbq.
+			'user_data'        => $user_data,
+			'custom_data'      => array(
+				'content_type' => 'product',
+				'content_ids'  => $content_ids,
+				'contents'     => $contents,
+				'value'        => (float) WC()->cart->get_total( 'edit' ),
+				'currency'     => $currency,
+				'num_items'    => (int) WC()->cart->get_cart_contents_count(),
+			),
+		);
+
+		WC()->session->set( $sent_key, 'yes' );
+		Background_Processor::schedule_payload( $payload );
 	}
 
 	/**
@@ -751,6 +878,9 @@ class Public_Handler {
 				if (!hasConsent || !hasFbq) {
 					// Queue until consent is granted / pixel initialized
 					window.wfbtPendingConsentAtc.push({ event: atcEvent, source: source });
+					try {
+						sessionStorage.setItem('wfbt_pending_consent_atc', JSON.stringify(window.wfbtPendingConsentAtc));
+					} catch(e) {}
 					return;
 				}
 
@@ -848,6 +978,19 @@ class Public_Handler {
 						if ($qtyInput.length) {
 							qty = parseFloat($qtyInput.val()) || qty;
 						}
+					}
+				}
+
+				// If still no productId, check href for ?add-to-cart=123 (e.g. Woodmart custom loop / home carousel)
+				if (!productId && $btn.attr('href')) {
+					var href = $btn.attr('href');
+					var matchId = href.match(/[?&]add-to-cart=(\d+)/);
+					if (matchId && matchId[1]) {
+						productId = matchId[1];
+					}
+					var matchQty = href.match(/[?&]quantity=(\d+)/);
+					if (matchQty && matchQty[1]) {
+						qty = parseFloat(matchQty[1]) || qty;
 					}
 				}
 

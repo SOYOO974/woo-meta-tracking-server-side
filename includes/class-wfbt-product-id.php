@@ -215,4 +215,24 @@ class Product_Id {
 		$cid = self::get( $product );
 		return '' !== $cid ? array( $cid ) : array();
 	}
+
+	/**
+	 * Resolve the recommended content_type for ViewContent.
+	 * Variable products with active variation IDs use 'product' as the variations
+	 * are individual items in the Meta catalog. Falls back to 'product_group'.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return string 'product' or 'product_group'.
+	 */
+	public static function get_view_content_type( $product ) {
+		if ( ! $product instanceof \WC_Product ) {
+			return 'product';
+		}
+		if ( $product->is_type( 'variable' ) ) {
+			$ids = self::get_view_ids( $product );
+			return empty( $ids ) ? 'product_group' : 'product';
+		}
+		return 'product';
+	}
 }
+

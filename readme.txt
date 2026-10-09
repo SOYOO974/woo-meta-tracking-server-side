@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.1.1
+Stable tag: 2.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,8 +14,8 @@ Tracking hybride WooCommerce pour Meta (Pixel Navigateur fbq + Conversions API C
 
 Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architecture hybride native :
 * **Pixel Navigateur (`fbq`)** : PageView, ViewContent, AddToCart (AJAX), InitiateCheckout et Purchase.
-* **Conversions API CAPI v21.0 (Server-Side)** : Envoi asynchrone sécurisé du Purchase via WooCommerce Action Scheduler, insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP iOS Safari).
-* **Déduplication parfaite à 100%** : Strict partage du même identifiant `eventID: 'order_' + order_id` entre le front-end et le serveur.
+* **Conversions API CAPI v21.0 (Server-Side)** : Envoi asynchrone sécurisé du Purchase, AddToCart et InitiateCheckout via WooCommerce Action Scheduler, insensible aux bloqueurs de publicité (AdBlockers) et aux restrictions de cookies (ITP iOS Safari).
+* **Déduplication parfaite à 100%** : Strict partage des mêmes identifiants `eventID` (`order_{id}`, `atc_*`, `ic_*`) entre le front-end et le serveur.
 * **Conformité RGPD Multi-Bannières** : Reconnaissance automatique de la bannière native Woo Gads (`woo_gads_consent`) et de Concord, avec activation à chaud sans rechargement de page et annulation sécurisée en cas de refus.
 * **WooCommerce HPOS (High-Performance Order Storage)** : Déclaration de compatibilité et utilisation exclusive des méthodes CRUD de l'objet `$order`.
 * **Normalisation E.164 Réunion** : Conversion automatique des numéros réunionnais (`0692`, `0693`, `0262` -> `+262`) et français (`+33`) avant hachage SHA-256.
@@ -28,6 +28,15 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.2.0 =
+* **Architecture Hybride Complète Server-Side (CAPI AddToCart & InitiateCheckout)** : Envoi asynchrone sécurisé de `AddToCart` et `InitiateCheckout` directement vers Meta Conversions API (Graph API v21.0) via WooCommerce Action Scheduler (`Background_Processor::schedule_payload`), éliminant définitivement les pertes d'ajouts au panier dues aux bloqueurs de publicité (AdBlockers / uBlock Origin), aux pannes réseau ou aux restrictions ITP Safari iOS.
+* **Déduplication Parfaite 1:1 Client/Serveur** : Chaque événement `AddToCart` serveur partage rigoureusement le même `event_id` (`atc_{cart_item_key}_{ts}`) avec le `eventID` du Pixel navigateur `fbq`. `InitiateCheckout` partage le même `event_id` déterministe basé sur le hash du panier (`ic_{hash}`). Meta fusionne automatiquement les deux flux sans aucun doublon de volume ni de chiffre d'affaires.
+* **Résilience Anti-AdBlocker Avancée (`extract_request_user_data`)** : Lorsque le Pixel navigateur est bloqué (absence de `_fbp`), le plugin génère et dépose automatiquement un identifiant first-party standard `_fbp` (`fb.1.{time}.{rand}`) et résout l'IP client réelle même sous Cloudflare Enterprise (`HTTP_CF_CONNECTING_IP`). Cela garantit que CAPI dispose des paramètres d'Event Match Quality (EMQ) requis pour valider les événements sans rejet HTTP 400.
+* **File d'Attente Pré-Consentement Persistante (`sessionStorage`)** : Les ajouts au panier réalisés avant l'interaction avec la bannière de consentement sont désormais persistés dans le `sessionStorage` (`wfbt_pending_consent_atc`), assurant leur rejeu immédiat lors du consentement même si le client a changé de page.
+* **Extraction Universelle des Boutons de Boucles & Carrousels Thèmes (Woodmart / KidShow)** : Regex automatique `/[?&]add-to-cart=(\d+)/` et `quantity=(\d+)` sur l'attribut `href` des boutons AJAX personnalisés sans `data-product_id` (ex: blocs carrousels `/home-2/`).
+* **Harmonisation Catalogue Meta (`Product_Id`)** : Alignement strict du format des Content IDs (SKU, WooCommerce Product ID, gla_ID, fb_wc) sur l'ensemble de l'entonnoir (ViewContent, AddToCart, InitiateCheckout, Purchase) en Pixel et en CAPI. Ajout de `Product_Id::get_view_content_type()` pour la gestion fine des produits variables et simples.
+* **Options de Configuration & Diagnostics CAPI** : Nouvelles options d'activation CAPI (`wfbt_enable_capi_atc`, `wfbt_enable_capi_ic`), reflétées en direct dans la grille de diagnostics pré-vol.
 
 = 2.1.1 =
 * **Résilience absolue AddToCart multi-chemins** : Détection et élimination des goulets d'étranglement identifiés sur les thèmes modernes (Comptoir de Cambaie / `_cpd`) avec requêtes fetch custom, boutons sticky mobiles (`mobile-bar`), et modales quick-view.

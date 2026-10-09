@@ -386,4 +386,182 @@ class Meta_Api {
 			wp_mail( $alert_email, $subject, $message );
 		}
 	}
+
+	/**
+	 * Send an arbitrary payload (AddToCart, InitiateCheckout, etc.) to Meta CAPI.
+	 *
+	 * @param array $payload Event payload.
+	 * @return bool True on success, false on failure or skip.
+	 */
+	public function send_capi_payload( $payload ) {
+		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
+		$access_token = get_option( 'wfbt_access_token', '' );
+
+		if ( empty( $pixel_id ) || empty( $access_token ) ) {
+			Logger::log( 'Missing Meta Configuration (Pixel ID or Access Token). Aborting CAPI event.' );
+			return false;
+		}
+
+		$event_name = isset( $payload['event_name'] ) ? $payload['event_name'] : 'Event';
+		$event_id   = isset( $payload['event_id'] ) ? $payload['event_id'] : 'n/a';
+		$user_data  = isset( $payload['user_data'] ) ? $payload['user_data'] : array();
+
+		// Pre-flight guard: Meta CAPI strictly requires at least one customer matching identifier.
+		$has_identifier = ! empty( $user_data['em'] ) || ! empty( $user_data['ph'] ) || ! empty( $user_data['fbp'] ) || ! empty( $user_data['fbc'] ) || ! empty( $user_data['external_id'] );
+
+		if ( ! $has_identifier ) {
+			Logger::log( sprintf( 'CAPI [%s] (%s): Skipped due to insufficient customer identifiers (missing fbp, fbc, email, phone, external_id).', $event_name, $event_id ), 'warning' );
+			return false;
+		}
+
+		$url = sprintf( 'https://graph.facebook.com/%s/%s/events', self::API_VERSION, rawurlencode( $pixel_id ) );
+
+		$args = array(
+			'method'  => 'POST',
+			'timeout' => 30,
+			'headers' => array(
+				'Content-Type' => 'application/json',
+			),
+			'body'    => wp_json_encode(
+				array(
+					'data'         => array( $payload ),
+					'access_token' => $access_token,
+				)
+			),
+		);
+
+		// Add Test Event Code if present.
+		$test_code = get_option( 'wfbt_test_code', '' );
+		if ( ! empty( $test_code ) ) {
+			$body = json_decode( $args['body'], true );
+			$body['test_event_code'] = $test_code;
+			$args['body'] = wp_json_encode( $body );
+		}
+
+		Logger::log( sprintf( 'Sending Meta CAPI [%s] payload (ID: %s, API %s)', $event_name, $event_id, self::API_VERSION ) );
+
+		$response = wp_remote_post( $url, $args );
+
+		if ( is_wp_error( $response ) ) {
+			Logger::log( sprintf( 'CAPI [%s] (%s) Network Error: %s', $event_name, $event_id, $response->get_error_message() ), 'error' );
+			return false;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$body_json   = wp_remote_retrieve_body( $response );
+
+		if ( 200 !== $status_code ) {
+			Logger::log( sprintf( 'CAPI [%s] (%s) Failed (HTTP %s): %s', $event_name, $event_id, $status_code, $body_json ), 'error' );
+			return false;
+		}
+
+		Logger::log( sprintf( 'CAPI [%s] (%s) Success: %s', $event_name, $event_id, $body_json ) );
+		return true;
+	}
+
+	/**
+	 * Extract and normalize visitor user_data from current request and cookies for CAPI events.
+	 * Includes automatic generation and deposit of first-party _fbp if missing to bypass adblockers.
+	 *
+	 * @return array
+	 */
+	public function extract_request_user_data() {
+		$user_data = array();
+
+		// 1. Client IP address (with Cloudflare / Proxy support)
+		$ip = '';
+		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_CONNECTING_IP'] ) );
+		} elseif ( function_exists( 'wc_get_ip_address' ) ) {
+			$ip = wc_get_ip_address();
+		} elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			$ip = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
+		}
+		if ( $ip ) {
+			$user_data['client_ip_address'] = $ip;
+		}
+
+		// 2. Client User Agent
+		if ( ! empty( $_SERVER['HTTP_USER_AGENT'] ) ) {
+			$user_data['client_user_agent'] = sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) );
+		}
+
+		// 3. Browser ID (_fbp)
+		$fbp = ! empty( $_COOKIE['_fbp'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['_fbp'] ) ) : '';
+		if ( empty( $fbp ) ) {
+			// Auto-generate first-party _fbp so adblocker visitors have a valid browser ID in CAPI
+			$fbp = 'fb.1.' . round( microtime( true ) * 1000 ) . '.' . wp_rand( 1000000000, 9999999999 );
+			if ( ! headers_sent() ) {
+				$cookie_domain = defined( 'COOKIE_DOMAIN' ) ? COOKIE_DOMAIN : '';
+				setcookie( '_fbp', $fbp, time() + ( 90 * 86400 ), '/', $cookie_domain, is_ssl(), false );
+				$_COOKIE['_fbp'] = $fbp;
+			}
+		}
+		if ( ! empty( $fbp ) ) {
+			$user_data['fbp'] = $fbp;
+		}
+
+		// 4. Click ID (_fbc) or reconstruction from fbclid
+		$fbc = ! empty( $_COOKIE['_fbc'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) ) : '';
+		if ( empty( $fbc ) && ! empty( $_COOKIE['wfbt_fbclid'] ) ) {
+			$fbclid = sanitize_text_field( wp_unslash( $_COOKIE['wfbt_fbclid'] ) );
+			$fbc    = 'fb.1.' . ( time() * 1000 ) . '.' . $fbclid;
+		}
+		if ( ! empty( $fbc ) ) {
+			$user_data['fbc'] = $fbc;
+		}
+
+		// 5. Logged-in WordPress user data
+		if ( is_user_logged_in() ) {
+			$user = wp_get_current_user();
+			if ( $user && $user->ID ) {
+				$user_data['external_id'] = array( (string) $user->ID );
+				if ( ! empty( $user->user_email ) ) {
+					$user_data['em'] = array( $this->hash_data( $user->user_email ) );
+				}
+				if ( ! empty( $user->first_name ) ) {
+					$user_data['fn'] = array( $this->hash_data( $user->first_name ) );
+				}
+				if ( ! empty( $user->last_name ) ) {
+					$user_data['ln'] = array( $this->hash_data( $user->last_name ) );
+				}
+				$phone = get_user_meta( $user->ID, 'billing_phone', true );
+				if ( ! empty( $phone ) ) {
+					$country         = get_user_meta( $user->ID, 'billing_country', true );
+					$formatted_phone = $this->format_phone_e164( $phone, $country );
+					if ( ! empty( $formatted_phone ) ) {
+						$user_data['ph'] = array( $this->hash_data( $formatted_phone ) );
+					}
+				}
+			}
+		} elseif ( function_exists( 'WC' ) && WC()->customer ) {
+			// 6. WooCommerce Guest Customer Session (if available)
+			$customer = WC()->customer;
+			$email    = $customer->get_billing_email();
+			if ( $email ) {
+				$user_data['em'] = array( $this->hash_data( $email ) );
+			}
+			$phone        = $customer->get_billing_phone();
+			$country_code = $customer->get_billing_country();
+			if ( $phone ) {
+				$formatted_phone = $this->format_phone_e164( $phone, $country_code );
+				if ( ! empty( $formatted_phone ) ) {
+					$user_data['ph'] = array( $this->hash_data( $formatted_phone ) );
+				}
+			}
+			$first_name = $customer->get_billing_first_name();
+			if ( $first_name ) {
+				$user_data['fn'] = array( $this->hash_data( $first_name ) );
+			}
+			$last_name = $customer->get_billing_last_name();
+			if ( $last_name ) {
+				$user_data['ln'] = array( $this->hash_data( $last_name ) );
+			}
+			if ( $customer->get_id() > 0 ) {
+				$user_data['external_id'] = array( (string) $customer->get_id() );
+			}
+		}
+
+		return $user_data;
+	}
 }
