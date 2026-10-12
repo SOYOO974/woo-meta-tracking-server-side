@@ -17,10 +17,10 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
    - Vérifier qu'aucune information sensible (jeton Meta `EAAB...`, token GitHub `ghp_...`, mot de passe, clé privée ou URL confidentielle) n'est présente dans les fichiers modifiés ou le code source via `git diff` ou recherche de motifs sensibles.
 
 // turbo
-7. Ajouter les fichiers modifiés (`git add woo-fb-tracking-server-side.php readme.txt AGENTS.md .agent/workflows/agent-releaser.md`)
+7. Ajouter les fichiers modifiés (`git add woo-fb-tracking-server-side.php readme.txt AGENTS.md .agent/workflows/agent-releaser.md` + tous les fichiers de code modifiés dans `public/`, `includes/`, `languages/` — contrôler avec `git status --short`)
 
 // turbo
-8. Créer le commit (`git commit -m "Bump version to v[VERSION]"`)
+8. Créer le commit au format conventionnel (ex. `git commit -m "fix(capi): <résumé> v[VERSION]"`)
 
 // turbo
 9. Pousser le commit vers la branche principale (`git push origin main`)
@@ -33,8 +33,9 @@ Ce workflow met à jour les numéros de version, crée un commit, pousse vers Gi
 
 12. Créer le package zip de release `woo-meta-tracking-server-side.zip` avec Python (standardisation des slashs `/` sous Linux et dossier racine `woo-fb-tracking-server-side`) :
     ```powershell
-    python -c "import zipfile, pathlib; p = pathlib.Path('.'); z = zipfile.ZipFile('woo-meta-tracking-server-side.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(f, 'woo-fb-tracking-server-side/' + str(f.relative_to(p)).replace('\\', '/')) for f in p.rglob('*') if f.is_file() and not any(f.parts[0].startswith(x) for x in ['.git', '.agent']) and not f.name.endswith('.zip')]; z.close()"
+    python -c "import zipfile, pathlib; p = pathlib.Path('.'); z = zipfile.ZipFile('woo-meta-tracking-server-side.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(f, 'woo-fb-tracking-server-side/' + f.relative_to(p).as_posix()) for f in p.rglob('*') if f.is_file() and not any(f.parts[0].startswith(x) for x in ['.git', '.agent']) and not f.name.endswith('.zip')]; z.close()"
     ```
+    `as_posix()` évite l'antislash qui casse l'échappement sous le Bash Git. En cas d'échec d'échappement, écrire ce script dans un fichier `.py` du dossier scratch. Vérifier ensuite qu'aucune entrée de l'archive ne contient d'antislash et que `woo-fb-tracking-server-side/woo-fb-tracking-server-side.php` est présent.
 
 13. Publier la release sur GitHub avec l'outil GitHub CLI (`gh`) :
     ```bash
