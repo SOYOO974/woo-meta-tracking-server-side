@@ -42,6 +42,8 @@ class Meta_Api {
 		}
 
 		// GDPR Cookie Consent Check (Native Woo Gads & Concord)
+		// Same rule as AddToCart / InitiateCheckout: only an explicit refusal cancels it,
+		// 'unknown' (banner ignored or closed) is sent on purpose.
 		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
 		$consent         = $order->get_meta( '_wfbt_consent' );
 

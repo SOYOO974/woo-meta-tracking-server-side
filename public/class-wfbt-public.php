@@ -72,6 +72,13 @@ class Public_Handler {
 		<!-- Meta Pixel Code by Woo FB Tracking Server-Side (SOYOO) -->
 		<script type="text/javascript">
 		(function() {
+			// Technical "real browser" flag (no identifier) checked server-side before any CAPI AddToCart.
+			try {
+				if (document.cookie.indexOf('wfbt_js=1') === -1) {
+					document.cookie = 'wfbt_js=1; path=/; max-age=86400; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+				}
+			} catch(e) {}
+
 			var wfbt_pixel_id = <?php echo wp_json_encode( esc_attr( $pixel_id ) ); ?>;
 			var wfbt_respect_consent = <?php echo wp_json_encode( 'yes' === $respect_consent ); ?>;
 			var wfbt_concord_prefix = <?php echo wp_json_encode( strtolower( esc_attr( $concord_cookie_name ) ) ); ?>;
@@ -521,6 +528,15 @@ class Public_Handler {
 			return;
 		}
 
+		$context = self::get_request_context();
+
+		// Hard skip: bots and programmatic additions are not shopper actions (no browser, no CAPI event).
+		$skip_reason = self::get_add_to_cart_skip_reason( $context );
+		if ( $skip_reason ) {
+			Logger::log( sprintf( 'capture_add_to_cart: skipped product #%d (var #%d) — reason: %s | %s', $product_id, $variation_id, $skip_reason, self::format_request_context( $context ) ) );
+			return;
+		}
+
 		$event = self::build_add_to_cart_event( $product_id, $quantity, $variation_id );
 		if ( ! $event ) {
 			return;
@@ -541,10 +557,109 @@ class Public_Handler {
 			setcookie( 'wfbt_has_pending_atc', '1', time() + 60, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), false );
 		}
 
-		Logger::log( sprintf( 'capture_add_to_cart: queued AddToCart for product #%d (var #%d, qty %s, ajax: %s, eventID: %s)', $product_id, $variation_id, $quantity, $event['ajax'] ? 'yes' : 'no', $event['options']['eventID'] ) );
+		Logger::log( sprintf( 'capture_add_to_cart: queued AddToCart for product #%d (var #%d, qty %s, ajax: %s, eventID: %s) | %s', $product_id, $variation_id, $quantity, $event['ajax'] ? 'yes' : 'no', $event['options']['eventID'], self::format_request_context( $context ) ) );
 
 		// Dispatch CAPI AddToCart event server-side (Hybrid Native with 1:1 deduplication)
-		self::maybe_send_add_to_cart_capi( $event, $product_id, $variation_id );
+		self::maybe_send_add_to_cart_capi( $event, $product_id, $variation_id, $context );
+	}
+
+	/**
+	 * Snapshot of the current request used to qualify server-side events.
+	 *
+	 * @return array
+	 */
+	private static function get_request_context() {
+		$uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+
+		if ( wp_doing_ajax() || ( defined( 'WC_DOING_AJAX' ) && WC_DOING_AJAX ) ) {
+			$type = 'ajax';
+		} elseif ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			$type = false !== strpos( $uri, '/wc/store/' ) ? 'store_api' : 'rest';
+		} else {
+			$type = 'page';
+		}
+
+		return array(
+			'method'      => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( $_SERVER['REQUEST_METHOD'] ) ) : 'CLI',
+			'type'        => $type,
+			'get_atc'     => isset( $_GET['add-to-cart'] ),
+			'user_agent'  => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+			'referer'     => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
+			'has_fbp'     => ! empty( $_COOKIE['_fbp'] ),
+			'has_js'      => ! empty( $_COOKIE['wfbt_js'] ),
+			'has_consent' => isset( $_COOKIE['woo_gads_consent'] ),
+			'consent'     => self::detect_consent_php(),
+		);
+	}
+
+	/**
+	 * One-line diagnostic representation of the request context for the logs.
+	 *
+	 * @param array $context Request context.
+	 * @return string
+	 */
+	private static function format_request_context( $context ) {
+		return sprintf(
+			'method=%s type=%s get_atc=%s consent=%s fbp=%s wfbt_js=%s woo_gads_consent=%s referer=%s ua=%s',
+			$context['method'],
+			$context['type'],
+			$context['get_atc'] ? 'yes' : 'no',
+			$context['consent'],
+			$context['has_fbp'] ? 'yes' : 'no',
+			$context['has_js'] ? 'yes' : 'no',
+			$context['has_consent'] ? 'yes' : 'no',
+			$context['referer'] ? $context['referer'] : '-',
+			$context['user_agent'] ? substr( $context['user_agent'], 0, 160 ) : '-'
+		);
+	}
+
+	/**
+	 * Detect crawlers, link previews and HTTP clients from the User-Agent.
+	 * Extend the list with the `wfbt_is_bot_request` filter.
+	 *
+	 * @param string $user_agent User-Agent header.
+	 * @return bool
+	 */
+	public static function is_bot_request( $user_agent = null ) {
+		if ( null === $user_agent ) {
+			$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) : '';
+		}
+
+		$is_bot = '' === trim( (string) $user_agent )
+			|| (bool) preg_match( '/bot|crawl|spider|slurp|facebookexternalhit|facebookcatalog|meta-externalagent|adsbot|google-inspectiontool|storebot|googleother|mediapartners|bingpreview|lighthouse|pagespeed|headlesschrome|phantomjs|curl|wget|python|httpclient|okhttp|go-http|java\/|libwww|scrapy|axios|node-fetch|guzzle|wordpress\//i', $user_agent );
+
+		return (bool) apply_filters( 'wfbt_is_bot_request', $is_bot, $user_agent );
+	}
+
+	/**
+	 * Return why a cart addition must not be tracked at all (bot or programmatic addition), or '' to track it.
+	 *
+	 * Note: the v2.1.1 "programmatic trigger filtering" only covers the browser-side
+	 * `added_to_cart` listener (cart drawer steppers). It never applied to this server hook,
+	 * which is why crawler GET /?add-to-cart=ID requests were reaching CAPI in v2.2.0.
+	 *
+	 * @param array $context Request context.
+	 * @return string
+	 */
+	private static function get_add_to_cart_skip_reason( $context ) {
+		$reason = '';
+
+		if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+			$reason = 'cron';
+		} elseif ( defined( 'WP_CLI' ) && WP_CLI ) {
+			$reason = 'wp_cli';
+		} elseif ( 'rest' === $context['type'] ) {
+			$reason = 'rest_api';
+		} elseif ( is_admin() && 'ajax' !== $context['type'] ) {
+			$reason = 'admin';
+		} elseif ( isset( $_GET['wcf_ac_token'] ) ) {
+			// Abandoned cart restoration link (woo-cart-abandonment-recovery-soyoo) re-adds the saved cart.
+			$reason = 'cart_restore';
+		} elseif ( self::is_bot_request( $context['user_agent'] ) ) {
+			$reason = 'bot';
+		}
+
+		return (string) apply_filters( 'wfbt_add_to_cart_skip_reason', $reason, $context );
 	}
 
 	/**
@@ -554,27 +669,62 @@ class Public_Handler {
 	 * @param array $event        Built AddToCart event data.
 	 * @param int   $product_id   Product ID.
 	 * @param int   $variation_id Variation ID (0 if simple).
+	 * @param array $context      Request context (see get_request_context()).
 	 */
-	private static function maybe_send_add_to_cart_capi( $event, $product_id, $variation_id = 0 ) {
+	private static function maybe_send_add_to_cart_capi( $event, $product_id, $variation_id = 0, $context = array() ) {
 		if ( 'yes' !== get_option( 'wfbt_enable_capi_atc', 'yes' ) ) {
 			return;
 		}
 
-		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
-		$consent         = self::detect_consent_php();
+		$event_id = $event['options']['eventID'];
 
-		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
-			Logger::log( 'AddToCart CAPI: transmission cancelled (GDPR marketing consent denied).' );
+		// Consent: only an explicit refusal cancels the event. 'unknown' (banner ignored or closed)
+		// is sent on purpose (agency decision, stricter than the browser Pixel). Bots are already
+		// excluded upstream and a real browser signal is required below.
+		if ( 'denied' === $context['consent'] ) {
+			Logger::log( sprintf( 'AddToCart CAPI (%s): not sent — consent %s.', $event_id, $context['consent'] ) );
 			return;
 		}
+
+		// Real browser signal: wfbt_js is set by our inline script on page load (works even when
+		// fbevents.js is blocked), _fbp by the Pixel. Neither present = no page was ever rendered.
+		if ( ! $context['has_js'] && ! $context['has_fbp'] ) {
+			Logger::log( sprintf( 'AddToCart CAPI (%s): not sent — no browser signal (wfbt_js / _fbp missing).', $event_id ) );
+			return;
+		}
+
+		// Server anti-duplicate: one CAPI AddToCart per product/variation per session every 10 minutes.
+		$dedup_key = (int) $product_id . ':' . (int) $variation_id;
+		$sent      = WC()->session->get( 'wfbt_capi_atc_sent', array() );
+		$sent      = is_array( $sent ) ? $sent : array();
+		$now       = time();
+		$sent      = array_filter(
+			$sent,
+			function ( $ts ) use ( $now ) {
+				return ( $now - (int) $ts ) < 10 * MINUTE_IN_SECONDS;
+			}
+		);
+		if ( isset( $sent[ $dedup_key ] ) ) {
+			Logger::log( sprintf( 'AddToCart CAPI (%s): not sent — duplicate of product %s within 10 minutes.', $event_id, $dedup_key ) );
+			WC()->session->set( 'wfbt_capi_atc_sent', $sent );
+			return;
+		}
+		$sent[ $dedup_key ] = $now;
+		WC()->session->set( 'wfbt_capi_atc_sent', $sent );
 
 		$api       = new Meta_Api();
 		$user_data = $api->extract_request_user_data();
 
+		// event_source_url: the referer, unless it is missing or the home page (grid links),
+		// in which case the product permalink describes the event better.
 		$product    = wc_get_product( $variation_id ? $variation_id : $product_id );
-		$source_url = wp_get_referer();
-		if ( ! $source_url && ! empty( $_SERVER['HTTP_REFERER'] ) ) {
-			$source_url = esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) );
+		$source_url = $context['referer'];
+		if ( $source_url ) {
+			$ref_path  = untrailingslashit( (string) wp_parse_url( $source_url, PHP_URL_PATH ) );
+			$home_path = untrailingslashit( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ) );
+			if ( $ref_path === $home_path ) {
+				$source_url = '';
+			}
 		}
 		if ( ! $source_url && $product ) {
 			$source_url = $product->get_permalink();
@@ -616,11 +766,14 @@ class Public_Handler {
 			return; // Deduplicated: already sent for this exact cart hash.
 		}
 
-		$respect_consent = get_option( 'wfbt_respect_consent', 'yes' );
-		$consent         = self::detect_consent_php();
-
-		if ( 'yes' === $respect_consent && 'denied' === $consent ) {
-			Logger::log( 'InitiateCheckout CAPI: transmission cancelled (GDPR marketing consent denied).' );
+		// Same rules as AddToCart: cancelled on explicit refusal only, never for bots.
+		$consent = self::detect_consent_php();
+		if ( 'denied' === $consent ) {
+			Logger::log( sprintf( 'InitiateCheckout CAPI (%s): not sent — consent %s.', $event_id, $consent ) );
+			return;
+		}
+		if ( self::is_bot_request() ) {
+			Logger::log( sprintf( 'InitiateCheckout CAPI (%s): not sent — bot User-Agent.', $event_id ) );
 			return;
 		}
 

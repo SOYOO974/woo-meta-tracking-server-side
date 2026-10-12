@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.2.0)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.2.1)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -300,12 +300,34 @@ Sur un site comme `kidshow.fr`, cette asymétrie produisait des anomalies critiq
 6. **Harmonisation Fine des Catalogues (`Product_Id`)** :
    - Ajout de `Product_Id::get_view_content_type()` pour attribuer dynamiquement `product` ou `product_group` aux fiches produits variables selon la présence des déclinaisons exportées.
 
+### M. AddToCart CAPI gonflé par les robots & consentement strict (v2.2.1)
+
+Constat comptoirdecambaie.re (10–12/10/2026, v2.2.0) : ~810 AddToCart reçus dont ~700 « serveur seul », contre ~355 ajouts réels mesurés par ThoughtMetric. Des heures avec 20 à 35 AddToCart pour 0 à 2 PageView, et `event_source_url` toujours égal à la page d'accueil.
+
+Causes :
+1. La page d'accueil expose 24 liens `href="/?add-to-cart=ID"` (`rel="nofollow"` ne bloque ni AdsBot ni Storebot) et `robots.txt` ne les interdit pas. Un robot qui suit le lien déclenche `woocommerce_add_to_cart` côté serveur.
+2. `extract_request_user_data()` génère un `_fbp` serveur pour toute requête, robots compris : le garde pré-vol (`fbp` présent) passe toujours.
+3. Le consentement `unknown` (aucun cookie de bannière, cas de tous les robots) n'annulait pas l'envoi : seul `denied` bloquait.
+4. Le « filtrage programmatique » de la v2.1.1 ne concernait que l'écouteur JS `added_to_cart` (tiroir), jamais le hook serveur.
+
+Correctif (`public/class-wfbt-public.php`) :
+- `get_request_context()` / `format_request_context()` : instantané de la requête (méthode, type `page|ajax|store_api|rest`, `?add-to-cart`, consentement, `_fbp`, `wfbt_js`, `woo_gads_consent`, referer, User-Agent) journalisé à chaque capture.
+- `get_add_to_cart_skip_reason()` : aucun suivi (ni navigateur ni CAPI) pour `cron`, `wp_cli`, `rest_api` (hors Store API), `admin` (hors AJAX), `cart_restore` (`?wcf_ac_token`, woo-cart-abandonment-recovery-soyoo) et `bot`. Filtre `wfbt_add_to_cart_skip_reason`.
+- `is_bot_request()` : regex User-Agent (bot, crawl, spider, AdsBot, Storebot, facebookexternalhit, HeadlessChrome, curl, python…) + UA vide. Filtre `wfbt_is_bot_request`. Les navigateurs intégrés FB/Instagram ne sont pas filtrés.
+- CAPI AddToCart : annulé uniquement sur consentement `denied` (`unknown` = bannière ignorée ou fermée → envoyé, décision de Julien du 12/10/2026, plus permissive que le Pixel navigateur et que la lecture stricte CNIL), signal navigateur réel obligatoire (cookie technique `wfbt_js` posé par le script inline du `<head>`, ou `_fbp`), anti-doublon serveur 10 min par produit/variation et par session (`wfbt_capi_atc_sent`), `event_source_url` = permalien produit si referer absent ou page d'accueil.
+- CAPI InitiateCheckout : annulé uniquement sur `denied` + filtre robots.
+- Purchase : inchangé (annulé seulement sur `denied`).
+- ⚠️ Risque RGPD assumé : pour un visiteur `unknown`, le pixel ne s'est pas chargé, donc `extract_request_user_data()` dépose un `_fbp` serveur avant consentement. Ne pas « corriger » sans accord de Julien.
+- Le gonflement par les robots reste neutralisé par le filtre User-Agent, le signal `wfbt_js` / `_fbp` et l'anti-doublon, indépendamment du consentement.
+
 ---
 
-## 6. 📌 Suivi & Backlog (au 09/10/2026)
+## 6. 📌 Suivi & Backlog (au 12/10/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
+| Release v2.2.1 (AddToCart CAPI gonflé par les robots, consentement `denied` seul bloquant, signal `wfbt_js`, anti-doublon 10 min) | ✅ Codée, à publier | Tag `v2.2.1` + déploiement comptoirdecambaie.re, contrôle sur 48 h : ATC serveur ≤ ATC navigateur × 1,2 |
+| comptoirdecambaie.re : `Disallow: /*add-to-cart=*` dans robots.txt | ⏳ Recommandé | Réduit les sessions et paniers fantômes créés par les robots (indépendant du tracking) |
 | Release v2.2.0 (Architecture Hybride Complète CAPI AddToCart + InitiateCheckout, déduplication 1:1, anti-adblocker _fbp auto, pré-consentement sessionStorage, regex href carrousels, Product_Id::get_view_content_type) | ✅ Validée & Prête pour Release | Tag GitHub `v2.2.0` + déploiement production KidShow |
 | KidShow (kidshow.fr) : Configuration du Format Content ID sur "WooCommerce Product ID" | ⏳ À faire en admin | Sélectionner "WooCommerce Product ID (e.g. 1234)" dans réglages |
 | Release v2.1.1 (Résilience AddToCart multi-chemins, endpoint `?wc-ajax=wfbt_pending_atc`) | ✅ Déployée | Supplantée par v2.2.0 |

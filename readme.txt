@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.2.0
+Stable tag: 2.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,14 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.2.1 =
+* **Correctif AddToCart CAPI gonflé (robots)** : les robots (crawlers SEO, Google Shopping, aperçus de liens) qui suivaient les liens `?add-to-cart=ID` des grilles produits déclenchaient un AddToCart serveur, car un `_fbp` était généré côté serveur pour chaque requête. Les ajouts provenant de robots (User-Agent filtré, extensible via le filtre `wfbt_is_bot_request`) et les ajouts programmatiques (cron, WP-CLI, REST hors Store API, admin hors AJAX, restauration de panier abandonné `wcf_ac_token`) ne sont plus suivis du tout.
+* **Consentement pour AddToCart et InitiateCheckout CAPI** : envoi annulé uniquement sur refus explicite (`denied`). L'absence de réponse ou la fermeture de la bannière (`unknown`) laisse partir l'événement serveur (choix assumé, plus permissif que le Pixel navigateur). Purchase suit la même règle.
+* **Signal navigateur obligatoire** : le CAPI AddToCart exige le cookie technique `wfbt_js` (posé par le script inline, même si `fbevents.js` est bloqué) ou un cookie `_fbp`.
+* **Anti-doublon serveur** : un seul CAPI AddToCart par produit/variation et par session toutes les 10 minutes.
+* **event_source_url** : permalien du produit quand le referer est absent ou correspond à la page d'accueil.
+* **Journalisation diagnostique** : chaque capture AddToCart journalise la méthode, le type de requête, le consentement, la présence de `_fbp` / `wfbt_js` / `woo_gads_consent`, le referer et le User-Agent, ainsi que la raison de tout non-envoi.
 
 = 2.2.0 =
 * **Architecture Hybride Complète Server-Side (CAPI AddToCart & InitiateCheckout)** : Envoi asynchrone sécurisé de `AddToCart` et `InitiateCheckout` directement vers Meta Conversions API (Graph API v21.0) via WooCommerce Action Scheduler (`Background_Processor::schedule_payload`), éliminant définitivement les pertes d'ajouts au panier dues aux bloqueurs de publicité (AdBlockers / uBlock Origin), aux pannes réseau ou aux restrictions ITP Safari iOS.
