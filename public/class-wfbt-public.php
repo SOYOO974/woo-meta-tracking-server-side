@@ -67,7 +67,8 @@ class Public_Handler {
 		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
 
 		// Prepare dynamic page event data.
-		$event_data = self::get_page_event_data();
+		$event_data    = self::get_page_event_data();
+		$matching_data = self::get_advanced_matching_data();
 		?>
 		<!-- Meta Pixel Code by Woo FB Tracking Server-Side (SOYOO) -->
 		<script type="text/javascript">
@@ -83,6 +84,7 @@ class Public_Handler {
 			var wfbt_respect_consent = <?php echo wp_json_encode( 'yes' === $respect_consent ); ?>;
 			var wfbt_concord_prefix = <?php echo wp_json_encode( strtolower( esc_attr( $concord_cookie_name ) ) ); ?>;
 			var wfbt_page_events = <?php echo wp_json_encode( $event_data ); ?>;
+			var wfbt_matching = <?php echo wp_json_encode( empty( $matching_data ) ? new \stdClass() : $matching_data ); ?>;
 
 			// Helper: Get marketing consent details and state across supported banners
 			function wfbtGetConsentInfo() {
@@ -198,7 +200,12 @@ class Public_Handler {
 					}
 				}
 
-				fbq('init', wfbt_pixel_id);
+				// Advanced Matching: SHA-256 hashed identifiers (checkout & thank-you pages only)
+				if (wfbt_matching && Object.keys(wfbt_matching).length) {
+					fbq('init', wfbt_pixel_id, wfbt_matching);
+				} else {
+					fbq('init', wfbt_pixel_id);
+				}
 				fbq('track', 'PageView');
 
 				// Fire contextual page events (ViewContent, InitiateCheckout, Purchase, AddToCart)
@@ -424,49 +431,123 @@ class Public_Handler {
 			}
 		}
 
-		// 3. Purchase on Order Received Page
+		// 3. Purchase on Order Received Page (valid order key + paid or trigger status only)
 		if ( function_exists( 'is_order_received_page' ) && is_order_received_page() ) {
-			global $wp;
-			$order_id = isset( $wp->query_vars['order-received'] ) ? absint( $wp->query_vars['order-received'] ) : 0;
-			if ( ! $order_id && isset( $_GET['order-received'] ) ) {
-				$order_id = absint( $_GET['order-received'] );
-			}
-
-			if ( $order_id ) {
-				$order = wc_get_order( $order_id );
-				if ( $order ) {
-					$contents = array();
-					foreach ( $order->get_items() as $item ) {
-						$product = $item->get_product();
-						if ( $product ) {
-							$pid        = Product_Id::get( $product );
-							$contents[] = array(
-								'id'         => $pid,
-								'quantity'   => (int) $item->get_quantity(),
-								'item_price' => (float) $order->get_item_total( $item, false, false ),
-							);
-						}
+			$order = self::get_received_order();
+			if ( $order ) {
+				$contents = array();
+				foreach ( $order->get_items() as $item ) {
+					$product = $item->get_product();
+					if ( $product ) {
+						$pid        = Product_Id::get( $product );
+						$contents[] = array(
+							'id'         => $pid,
+							'quantity'   => (int) $item->get_quantity(),
+							'item_price' => (float) $order->get_item_total( $item, false, false ),
+						);
 					}
+				}
 
-					$events[] = array(
-						'name'    => 'Purchase',
-						'params'  => array(
-							'content_type' => 'product',
-							'content_ids'  => array_values( array_unique( wp_list_pluck( $contents, 'id' ) ) ),
-							'contents'     => $contents,
-							'value'        => (float) $order->get_total(),
-							'currency'     => $order->get_currency(),
-							'num_items'    => (int) $order->get_item_count(),
-						),
-						'options' => array(
-							'eventID' => 'order_' . $order->get_id(), // Deduplication key matching CAPI.
-						),
-					);
+				$events[] = array(
+					'name'    => 'Purchase',
+					'params'  => array(
+						'content_type' => 'product',
+						'content_ids'  => array_values( array_unique( wp_list_pluck( $contents, 'id' ) ) ),
+						'contents'     => $contents,
+						'value'        => (float) $order->get_total(),
+						'currency'     => $order->get_currency(),
+						'num_items'    => (int) $order->get_item_count(),
+					),
+					'options' => array(
+						'eventID' => 'order_' . $order->get_id(), // Deduplication key matching CAPI.
+					),
+				);
+
+				// Same custom parameter as the CAPI Purchase, whichever event Meta keeps after deduplication.
+				$customer_type = Meta_Api::get_customer_type( $order );
+				if ( $customer_type ) {
+					$last = count( $events ) - 1;
+					$events[ $last ]['params']['customer_type'] = $customer_type;
 				}
 			}
 		}
 
 		return $events;
+	}
+
+	/**
+	 * Order shown on the thank-you page, only if the URL key matches and the order is paid
+	 * (or in a configured CAPI trigger status). Prevents a browser Purchase for a third-party
+	 * order (guessed ID) or for an unpaid / failed order that the CAPI will never send.
+	 *
+	 * @return \WC_Order|null
+	 */
+	private static function get_received_order() {
+		static $resolved = false;
+		static $order    = null;
+
+		if ( $resolved ) {
+			return $order;
+		}
+		$resolved = true;
+
+		if ( ! function_exists( 'is_order_received_page' ) || ! is_order_received_page() ) {
+			return null;
+		}
+
+		global $wp;
+		$order_id = isset( $wp->query_vars['order-received'] ) ? absint( $wp->query_vars['order-received'] ) : 0;
+		if ( ! $order_id && isset( $_GET['order-received'] ) ) {
+			$order_id = absint( $_GET['order-received'] );
+		}
+		if ( ! $order_id ) {
+			return null;
+		}
+
+		$candidate = wc_get_order( $order_id );
+		if ( ! $candidate instanceof \WC_Order ) {
+			return null;
+		}
+
+		$order_key = isset( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : '';
+		if ( ! $candidate->key_is_valid( $order_key ) ) {
+			Logger::log( "Thank-you page: browser Purchase skipped for Order #{$order_id} — reason: invalid_key" );
+			return null;
+		}
+
+		$trigger_statuses = get_option( 'wfbt_trigger_statuses', array( 'processing', 'completed' ) );
+		if ( ! is_array( $trigger_statuses ) ) {
+			$trigger_statuses = array( 'processing', 'completed' );
+		}
+		if ( ! $candidate->is_paid() && ! $candidate->has_status( $trigger_statuses ) ) {
+			// The CAPI still sends it alone (same event_id) once the order reaches a trigger status.
+			Logger::log( "Thank-you page: browser Purchase skipped for Order #{$order_id} — reason: status_" . $candidate->get_status() );
+			return null;
+		}
+
+		$order = $candidate;
+		return $order;
+	}
+
+	/**
+	 * Hashed Advanced Matching identifiers for fbq('init'), on checkout and thank-you pages only.
+	 * These pages are never served from the Edge cache, so no customer hash can be cached for others.
+	 *
+	 * @return array
+	 */
+	private static function get_advanced_matching_data() {
+		if ( ! function_exists( 'is_checkout' ) || ! is_checkout() ) {
+			return array();
+		}
+
+		$api = new Meta_Api();
+
+		if ( is_order_received_page() ) {
+			$order = self::get_received_order();
+			return $order ? $api->get_advanced_matching_data( $order ) : array();
+		}
+
+		return $api->get_advanced_matching_data();
 	}
 
 	/**
@@ -925,12 +1006,16 @@ class Public_Handler {
 				var urlParams = new URLSearchParams(window.location.search);
 				var fbclid = urlParams.get('fbclid');
 				if (fbclid) {
+					var clickTs = Date.now();
 					var expiryDate = new Date();
-					expiryDate.setTime(expiryDate.getTime() + (90 * 24 * 60 * 60 * 1000)); // 90 days
-					document.cookie = 'wfbt_fbclid=' + encodeURIComponent(fbclid) + '; expires=' + expiryDate.toUTCString() + '; path=/; SameSite=Lax';
+					expiryDate.setTime(clickTs + (90 * 24 * 60 * 60 * 1000)); // 90 days
+					var cookieTail = '; expires=' + expiryDate.toUTCString() + '; path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+					document.cookie = 'wfbt_fbclid=' + encodeURIComponent(fbclid) + cookieTail;
+					// Canonical fbc keeping the real click time (Meta flags fbc rebuilt with a later timestamp)
+					document.cookie = 'wfbt_fbc=' + encodeURIComponent('fb.1.' + clickTs + '.' + fbclid) + cookieTail;
 					try {
 						localStorage.setItem('wfbt_fbclid', fbclid);
-						localStorage.setItem('wfbt_fbclid_ts', Date.now().toString());
+						localStorage.setItem('wfbt_fbclid_ts', clickTs.toString());
 					} catch(err) {}
 				}
 			} catch(e) {}
@@ -947,16 +1032,19 @@ class Public_Handler {
 
 			// Helper to resolve canonical fbc
 			function wfbtResolveFbc() {
-				var fbc = wfbtGetCookie('_fbc');
+				var fbc = wfbtGetCookie('_fbc') || wfbtGetCookie('wfbt_fbc');
 				if (fbc) return fbc;
 
 				var fbclid = wfbtGetCookie('wfbt_fbclid');
 				var ts = Date.now();
 				try {
-					if (!fbclid && localStorage.getItem('wfbt_fbclid')) {
-						fbclid = localStorage.getItem('wfbt_fbclid');
-						var savedTs = localStorage.getItem('wfbt_fbclid_ts');
-						if (savedTs) ts = savedTs;
+					var storedFbclid = localStorage.getItem('wfbt_fbclid');
+					if (!fbclid && storedFbclid) {
+						fbclid = storedFbclid;
+					}
+					var savedTs = localStorage.getItem('wfbt_fbclid_ts');
+					if (fbclid && fbclid === storedFbclid && savedTs) {
+						ts = savedTs;
 					}
 				} catch(e) {}
 
@@ -1207,7 +1295,7 @@ class Public_Handler {
 		$rendered = true;
 
 		$fbp     = isset( $_COOKIE['_fbp'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_COOKIE['_fbp'] ) ) ) : '';
-		$fbc     = isset( $_COOKIE['_fbc'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) ) ) : '';
+		$fbc     = Meta_Api::resolve_request_fbc();
 		$consent = self::detect_consent_php();
 		?>
 		<input type="hidden" name="wfbt_fbp" id="wfbt_fbp" value="<?php echo esc_attr( $fbp ); ?>" />
@@ -1261,11 +1349,8 @@ class Public_Handler {
 		$fbc = '';
 		if ( ! empty( $_POST['wfbt_fbc'] ) ) {
 			$fbc = sanitize_text_field( wp_unslash( $_POST['wfbt_fbc'] ) );
-		} elseif ( ! empty( $_COOKIE['_fbc'] ) ) {
-			$fbc = sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) );
-		} elseif ( ! empty( $_COOKIE['wfbt_fbclid'] ) ) {
-			$fbclid = sanitize_text_field( wp_unslash( $_COOKIE['wfbt_fbclid'] ) );
-			$fbc    = 'fb.1.' . ( time() * 1000 ) . '.' . $fbclid;
+		} else {
+			$fbc = Meta_Api::resolve_request_fbc();
 		}
 
 		// 3. Capture consent state
@@ -1577,6 +1662,7 @@ class Public_Handler {
 			if (clearBtn) {
 				clearBtn.addEventListener('click', function() {
 					document.cookie = 'wfbt_fbclid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+					document.cookie = 'wfbt_fbc=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 					try {
 						localStorage.removeItem('wfbt_fbclid');
 						localStorage.removeItem('wfbt_fbclid_ts');

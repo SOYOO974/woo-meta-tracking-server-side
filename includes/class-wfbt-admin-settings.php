@@ -602,6 +602,8 @@ class Admin_Settings {
 		$fbc_cnt          = 0;
 		$consent_ok_cnt   = 0;
 		$consent_no_cnt   = 0;
+		$new_cust_cnt     = 0;
+		$typed_cust_cnt   = 0;
 
 		// Group for last 14 days activity
 		$chart_days = array();
@@ -625,7 +627,14 @@ class Admin_Settings {
 			$fbp = $ord->get_meta( '_wfbt_fbp' );
 			$fbc = $ord->get_meta( '_wfbt_fbc' );
 			$cst = $ord->get_meta( '_wfbt_consent' );
+			$ctp = $ord->get_meta( '_wfbt_customer_type' );
 
+			if ( 'new' === $ctp || 'returning' === $ctp ) {
+				$typed_cust_cnt++;
+				if ( 'new' === $ctp ) {
+					$new_cust_cnt++;
+				}
+			}
 			if ( 'Success' === $st ) {
 				$capi_success_cnt++;
 			}
@@ -660,6 +669,7 @@ class Admin_Settings {
 		$capi_rate = $total_orders_30d > 0 ? round( ( $capi_success_cnt / $total_orders_30d ) * 100 ) : 0;
 		$fbp_rate  = $total_orders_30d > 0 ? round( ( $fbp_cnt / $total_orders_30d ) * 100 ) : 0;
 		$fbc_rate  = $total_orders_30d > 0 ? round( ( $fbc_cnt / $total_orders_30d ) * 100 ) : 0;
+		$new_rate  = $typed_cust_cnt > 0 ? round( ( $new_cust_cnt / $typed_cust_cnt ) * 100 ) : 0;
 
 		$max_day_orders = 1;
 		foreach ( $chart_days as $cday ) {
@@ -875,6 +885,13 @@ class Admin_Settings {
 						<div style="font-size: 24px; font-weight: 700; color: #1877f2; margin-top: 4px;"><?php echo esc_html( $total_orders_30d ); ?></div>
 						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php esc_html_e( 'Last 30 days volume', 'wfbt-server-side' ); ?></div>
 					</div>
+
+					<div style="background: #f6f7f7; padding: 14px; border-radius: 6px; border-left: 4px solid #0a7d3b;">
+						<div style="font-size: 11px; text-transform: uppercase; color: #646970; font-weight: 600;"><?php esc_html_e( 'New Customers Share', 'wfbt-server-side' ); ?></div>
+						<div style="font-size: 24px; font-weight: 700; color: #0a7d3b; margin-top: 4px;"><?php echo esc_html( $new_rate ); ?>%</div>
+						<?php /* translators: 1: New customers count, 2: Orders with a known customer type */ ?>
+						<div style="font-size: 11px; color: #646970; margin-top: 2px;"><?php printf( esc_html__( '%1$d new / %2$d qualified orders', 'wfbt-server-side' ), $new_cust_cnt, $typed_cust_cnt ); ?></div>
+					</div>
 				</div>
 
 				<!-- 14-Day Activity Bar Chart (SVG Native) -->
@@ -971,6 +988,7 @@ class Admin_Settings {
 							<th><?php esc_html_e( '_fbp Cookie', 'wfbt-server-side' ); ?></th>
 							<th><?php esc_html_e( '_fbc Cookie', 'wfbt-server-side' ); ?></th>
 							<th style="width: 120px;"><?php esc_html_e( 'Concord Consent', 'wfbt-server-side' ); ?></th>
+							<th style="width: 100px;"><?php esc_html_e( 'Customer', 'wfbt-server-side' ); ?></th>
 							<th style="width: 100px;"><?php esc_html_e( 'Actions', 'wfbt-server-side' ); ?></th>
 						</tr>
 					</thead>
@@ -983,7 +1001,7 @@ class Admin_Settings {
 						) ) : array();
 
 						if ( empty( $orders_recent ) ) {
-							echo '<tr><td colspan="8">' . esc_html__( 'No orders found.', 'wfbt-server-side' ) . '</td></tr>';
+							echo '<tr><td colspan="9">' . esc_html__( 'No orders found.', 'wfbt-server-side' ) . '</td></tr>';
 						} else {
 							foreach ( $orders_recent as $order ) {
 								if ( ! $order instanceof \WC_Order ) {
@@ -996,6 +1014,7 @@ class Admin_Settings {
 								$fbp      = $order->get_meta( '_wfbt_fbp' );
 								$fbc      = $order->get_meta( '_wfbt_fbc' );
 								$consent  = $order->get_meta( '_wfbt_consent' );
+								$cust     = $order->get_meta( '_wfbt_customer_type' );
 
 								// Status formatting
 								if ( 'Success' === $status ) {
@@ -1037,6 +1056,15 @@ class Admin_Settings {
 									$consent_html = '<span style="background:#f1f3f4; color:#5f6368; padding:3px 8px; border-radius:4px; font-size:12px;">' . esc_html__( 'Not detected', 'wfbt-server-side' ) . '</span>';
 								}
 
+								// Customer type formatting (set when the Purchase is built, Pixel or CAPI)
+								if ( 'new' === $cust ) {
+									$cust_html = '<span style="background:#e7f7ed; color:#0a7d3b; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'New', 'wfbt-server-side' ) . '</span>';
+								} elseif ( 'returning' === $cust ) {
+									$cust_html = '<span style="background:#e8f0fe; color:#1a56db; padding:3px 8px; border-radius:4px; font-weight:600; font-size:12px;">' . esc_html__( 'Returning', 'wfbt-server-side' ) . '</span>';
+								} else {
+									$cust_html = '<span style="color:#888;">—</span>';
+								}
+
 								echo '<tr>';
 								echo '<td><a href="' . esc_url( admin_url( 'post.php?post=' . $order_id . '&action=edit' ) ) . '"><strong>#' . esc_html( $order_id ) . '</strong></a></td>';
 								echo '<td>' . esc_html( $order->get_date_created() ? wc_format_datetime( $order->get_date_created() ) : '' ) . '</td>';
@@ -1045,6 +1073,7 @@ class Admin_Settings {
 								echo '<td>' . wp_kses_post( $fbp_html ) . '</td>';
 								echo '<td>' . wp_kses_post( $fbc_html ) . '</td>';
 								echo '<td>' . wp_kses_post( $consent_html ) . '</td>';
+								echo '<td>' . wp_kses_post( $cust_html ) . '</td>';
 								echo '<td><button class="button button-secondary wfbt-resend-btn" data-order-id="' . esc_attr( $order_id ) . '">' . esc_html__( 'Resend', 'wfbt-server-side' ) . '</button></td>';
 								echo '</tr>';
 							}

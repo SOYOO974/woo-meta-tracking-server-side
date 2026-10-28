@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.2.1)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.3.0)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -23,7 +23,8 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 9. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
 10. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète avec indicateur d'événements CAPI, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin avec étiquetage explicite de la source des AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`).
 11. **Filtrage anti-robots & ajouts programmatiques (v2.2.1)** : aucun AddToCart (navigateur ni CAPI) pour les robots (User-Agent, filtre `wfbt_is_bot_request`), cron, WP-CLI, REST hors Store API, admin hors AJAX et restauration de panier abandonné (`?wcf_ac_token`). Le CAPI AddToCart exige en plus un signal navigateur réel (cookie technique `wfbt_js` ou `_fbp`) et un anti-doublon serveur de 10 min par produit/variation.
-12. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
+12. **Qualité du Purchase et du matching (v2.3.0)** : Purchase navigateur conditionné à une clé de commande valide et à une commande payée (ou en statut déclencheur), Advanced Matching Pixel haché sur checkout + remerciement, `external_id` haché identique Pixel/CAPI, horodatage `fbc` = date réelle du clic (cookie `wfbt_fbc`), segmentation `customer_type` (`new` / `returning`) sur Purchase. Voir §5.N.
+13. **Mises à jour automatiques transparentes** : Bibliothèque `plugin-update-checker` (v5.6) connectée directement aux releases GitHub de `SOYOO974/woo-meta-tracking-server-side`.
 
 ---
 
@@ -171,6 +172,7 @@ Sur la page `is_order_received_page()` :
 | `_wfbt_capi_status` | `string` | Statut CAPI (`Pending`, `Success`, `Failed`, `Ignored (Consent Denied)`, `Ignored (Insufficient Customer Data)`). |
 | `_wfbt_capi_sent_at` | `string` | Horodatage MySQL de la transmission réussie vers Meta. |
 | `_wfbt_capi_error` | `string` | Détail de l'erreur API ou réseau en cas d'échec. |
+| `_wfbt_customer_type` | `string` | `new` ou `returning` (v2.3.0), calculé une fois au premier Purchase construit (Pixel ou CAPI) d'après les commandes `processing` / `completed` antérieures (ID client OU email). Envoyé en paramètre personnalisé `customer_type`. |
 
 **Cookies et clés de session utilisés côté front :**
 
@@ -178,7 +180,8 @@ Sur la page `is_order_received_page()` :
 | :--- | :--- | :--- |
 | `wfbt_js` | Cookie 24 h, posé par le script inline du `<head>` | Flag technique « vrai navigateur » (sans identifiant), exigé avant tout CAPI AddToCart (v2.2.1). Nom volontairement hors préfixes `wordpress_` / `woocommerce_` pour ne pas casser le cache Edge. |
 | `wfbt_has_pending_atc` | Cookie 60 s | Signale un AddToCart en attente en session, pour contourner le cache Edge (v2.1.1). |
-| `wfbt_fbclid` | Cookie 90 j + `localStorage` | `fbclid` capturé à l'atterrissage, sert à reconstruire `_fbc`. |
+| `wfbt_fbclid` | Cookie 90 j + `localStorage` (`wfbt_fbclid`, `wfbt_fbclid_ts`) | `fbclid` capturé à l'atterrissage (repli historique pour reconstruire `_fbc`). |
+| `wfbt_fbc` | Cookie 90 j (v2.3.0) | `fbc` canonique `fb.1.{date du clic ms}.{fbclid}` écrit à l'atterrissage. Ordre de lecture : `_fbc` > `wfbt_fbc` > `wfbt_fbclid` (`Meta_Api::resolve_request_fbc()`). |
 | `wfbt_pending_atc` | Session WC | File des AddToCart à restituer au navigateur (fragments, endpoint, rendu de page). |
 | `wfbt_capi_atc_sent` | Session WC | Horodatages des CAPI AddToCart envoyés par `product_id:variation_id` (anti-doublon 10 min, v2.2.1). |
 | `wfbt_capi_ic_sent_{cart_hash}` | Session WC | Verrou InitiateCheckout CAPI par panier. |
@@ -341,12 +344,28 @@ Correctif (`public/class-wfbt-public.php`) :
 - Signature d'un trafic robot dans Meta : beaucoup d'événements « serveur seul », très peu de PageView sur les mêmes heures, `event_source_url` = page d'accueil.
 - Les prompts de modification peuvent se tromper de version : vérifier `git tag` et la date du dernier déploiement avant de numéroter (le prompt visait « v2.1.1 → v2.1.2 » alors que le site tournait en v2.2.0).
 
+### N. Fiabilité du Purchase & Event Match Quality (v2.3.0)
+
+Objectif : augmenter le ROAS en fiabilisant les conversions déclarées et leur correspondance, sans stockage supplémentaire ni réglage qui fausse la valeur.
+
+- **Page de remerciement** (`Public_Handler::get_received_order()`) : Purchase navigateur seulement si `$order->key_is_valid( $_GET['key'] )` ET (`is_paid()` OU statut dans `wfbt_trigger_statuses`). Logs `invalid_key` / `status_<slug>`. Une commande `pending` au retour de passerelle (IPN lent) n'a pas de Pixel : le CAPI l'envoie seul au passage en statut déclencheur, même `event_id`.
+- **Advanced Matching** (`Public_Handler::get_advanced_matching_data()` → `Meta_Api::get_advanced_matching_data()`) : 3e argument de `fbq('init')` avec `em`, `ph`, `fn`, `ln`, `ct`, `st`, `zp`, `country`, `external_id` déjà hachés SHA-256 (même code que le CAPI). Limité à `is_checkout()` (inclut la page de remerciement) car ces pages ne sont jamais servies par le cache Edge : aucun hash client ne peut être mis en cache pour un autre visiteur. Appel de `extract_request_user_data( false )` : aucun `_fbp` serveur déposé par ce chemin.
+- **`external_id` haché** sur tous les événements CAPI et le Pixel (avant v2.3.0 : ID brut côté CAPI). Le Pixel ne re-hache pas une valeur SHA-256 de 64 caractères hexadécimaux, les deux côtés sont donc identiques.
+- **Horodatage fbc** : avant v2.3.0, `fb.1.{time()}.{fbclid}` utilisait l'heure de la commande. Désormais la date du clic est conservée (cookie `wfbt_fbc`, `localStorage wfbt_fbclid_ts`).
+- **Segmentation client** (`Meta_Api::get_customer_type()`) : `wc_get_orders` (`limit 1`, `return ids`, `exclude` commande courante, statuts `wc-processing` / `wc-completed`, `customer => [ID, email]`, `date_created < date de la commande`), stocké via `save_meta_data()`. Paramètre **personnalisé** `customer_type` : `customer_segmentation` / `new_customer_to_business` n'apparaît pas dans la documentation officielle Meta des `custom_data` (vérifié le 28/10/2026), ne pas l'utiliser sans preuve.
+- **Écarté volontairement (ne pas réintroduire sans accord de Julien)** :
+  - Cookies 400 jours + restauration localStorage → cookie : sans effet sous ITP (cookies JS plafonnés à 7 jours, localStorage purgé après 7 jours sans visite), fenêtre d'attribution Meta par défaut de 7 jours, et 400 j dépasse les 13 mois CNIL.
+  - Cross-device stitching (transients par email, `user_meta`) : Meta rapproche déjà via `em` / `ph` hachés, cas couvert étroit, écritures en base à chaque `update_order_review`, attribution erronée sur email partagé.
+  - Seuil minimum, pondération ou blocage des clients existants, événement `NewCustomerPurchase` : le Pixel (souvent retenu par Meta à la déduplication) garde la valeur réelle, et sous-déclarer le CA dégrade le ROAS affiché et l'apprentissage. Le pilotage nouveaux clients se fait dans Meta : définitions « clients existants » + plafond de budget Advantage+, conversion personnalisée sur `customer_type = new`.
+
 ---
 
-## 6. 📌 Suivi & Backlog (au 12/10/2026)
+## 6. 📌 Suivi & Backlog (au 28/10/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
+| Release v2.3.0 (Purchase sécurisé clé + statut payé, Advanced Matching Pixel, `external_id` haché, horodatage `fbc`, `customer_type`, traductions fr_FR complètes) | ✅ Publiée le 28/10/2026 | Sur chaque site : mise à jour PUC + purge cache, « Tester les événements » (Advanced Matching sur Purchase, `customer_type`, déduplication). Suivre l'EMQ Purchase et le ratio Purchase Meta / commandes payées sur 7 à 14 jours |
+| Meta : conversion personnalisée « Purchase où customer_type = new » + définitions clients existants Advantage+ | ⏳ À faire dans le Gestionnaire d'événements / Ads Manager | Aucun code requis |
 | Release v2.2.1 (AddToCart CAPI gonflé par les robots, consentement `denied` seul bloquant, signal `wfbt_js`, anti-doublon 10 min) | ✅ Publiée le 12/10/2026 (commit `79c82da`, tag `v2.2.1`) | comptoirdecambaie.re : mise à jour PUC + purge cache Rocket.net, test « Tester les événements », contrôle sur 48 h : ATC serveur ≤ ATC navigateur × 1,2 |
 | RGPD : `_fbp` serveur déposé avant consentement pour les visiteurs `unknown` | ⚠️ Risque assumé par Julien | À réévaluer en cas de contrôle CNIL ou de plainte |
 | comptoirdecambaie.re : `Disallow: /*add-to-cart=*` dans robots.txt | ⏳ Recommandé | Réduit les sessions et paniers fantômes créés par les robots (indépendant du tracking) |
@@ -355,8 +374,9 @@ Correctif (`public/class-wfbt-public.php`) :
 | Release v2.1.1 (Résilience AddToCart multi-chemins, endpoint `?wc-ajax=wfbt_pending_atc`) | ✅ Déployée | Supplantée par v2.2.0 |
 | `woo-meta-catalog-feed-soyoo` v1.3.0 (filtre `soyoo_meta_catalog_content_id`, `Feed_Item::get_content_id()`, encadré statut tracking, fix SKU variations) | ⏳ À faire dans la session dédiée du flux | Prompt fourni à Julien |
 | comptoirdecambaie.re : contrôle du ratio AddToCart / InitiateCheckout | ⏳ À contrôler après v2.2.1 | Le ratio doit repasser > 1 sans gonflement (comparer avec ThoughtMetric) |
-| Page de remerciement : `Purchase` rendu pour tout `order-received` sans vérifier `?key=` (fuite du montant d'une commande tierce) | ⚠️ Non corrigé | Ajouter `$order->key_is_valid( $_GET['key'] )` dans `get_page_event_data()` |
-| Traductions fr_FR des nouvelles chaînes v2.2.0 (v2.2.1 n'ajoute que des logs non traduits) | ⚠️ Manquantes | Régénérer `.pot`, compléter `.po`, recompiler `.mo` |
+| Page de remerciement : `Purchase` rendu pour tout `order-received` sans vérifier `?key=` | ✅ Corrigé en v2.3.0 | — |
+| Traductions fr_FR des chaînes v2.2.0 à v2.3.0 | ✅ Complétées en v2.3.0 | WP-CLI absent du Bash Git : lancer `wp i18n make-pot` depuis PowerShell, fusion `.po` + `.mo` via `polib` |
+| Libellé admin « Annuler l'événement (CNIL stricte) » alors que `unknown` est envoyé | ⚠️ Wording à revoir | Ne bloque que `denied` |
 
 ---
 

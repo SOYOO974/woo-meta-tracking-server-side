@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.2.1
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,15 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.3.0 =
+* **Purchase navigateur sécurisé** : sur la page de remerciement, le Pixel n'envoie Purchase que si la clé de commande de l'URL est valide (`key_is_valid`) et que la commande est payée ou dans un statut déclencheur CAPI. Plus de Purchase pour une commande tierce (ID deviné) ni pour une commande en échec ou impayée, qui gonflait le ROAS affiché. Une commande encore en attente au retour de passerelle est envoyée par le CAPI seul (même `event_id`).
+* **Advanced Matching Pixel** : `fbq('init')` reçoit les identifiants client hachés SHA-256 (email, téléphone E.164, nom, ville, code postal, pays, `external_id`) sur le checkout et la page de remerciement uniquement (pages jamais servies par le cache Edge). Hachage et normalisation identiques au CAPI.
+* **external_id haché** : l'ID client WooCommerce est désormais envoyé haché SHA-256, identique côté Pixel et CAPI.
+* **Horodatage fbc corrigé** : le cookie `wfbt_fbc` conserve la date réelle du clic publicitaire (`fb.1.{clic}.{fbclid}`) au lieu de la date de commande, que Meta signalait comme fbc modifié.
+* **Segmentation nouveau / client existant** : méta HPOS `_wfbt_customer_type` (`new` / `returning`, d'après les commandes payées antérieures par ID client ou email) et paramètre personnalisé `customer_type` sur le Purchase Pixel et CAPI. Utilisable dans une conversion personnalisée Meta. La valeur de la commande n'est jamais modifiée.
+* **Diagnostics** : colonne Client (Nouveau / Existant) dans l'audit des 20 dernières commandes et KPI « Part de nouveaux clients » sur 30 jours.
+* **Traductions** : toutes les chaînes v2.2.0 à v2.3.0 traduites en français.
 
 = 2.2.1 =
 * **Correctif AddToCart CAPI gonflé (robots)** : les robots (crawlers SEO, Google Shopping, aperçus de liens) qui suivaient les liens `?add-to-cart=ID` des grilles produits déclenchaient un AddToCart serveur, car un `_fbp` était généré côté serveur pour chaque requête. Les ajouts provenant de robots (User-Agent filtré, extensible via le filtre `wfbt_is_bot_request`) et les ajouts programmatiques (cron, WP-CLI, REST hors Store API, admin hors AJAX, restauration de panier abandonné `wcf_ac_token`) ne sont plus suivis du tout.

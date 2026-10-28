@@ -217,7 +217,7 @@ class Meta_Api {
 		// 9. Customer External ID (external_id) - WooCommerce Customer ID to boost Event Match Quality (EMQ)
 		$customer_id = $order->get_customer_id();
 		if ( $customer_id > 0 ) {
-			$user_data['external_id'] = array( (string) $customer_id );
+			$user_data['external_id'] = array( $this->hash_data( $customer_id ) );
 		}
 
 		// 10. Browser ID (_fbp) - Meta expects raw unhashed string
@@ -335,7 +335,7 @@ class Meta_Api {
 			}
 		}
 
-		return array(
+		$custom_data = array(
 			'currency'     => $order->get_currency(),
 			'value'        => (float) $order->get_total(),
 			'content_ids'  => array_values( array_unique( $content_ids ) ),
@@ -343,6 +343,15 @@ class Meta_Api {
 			'content_type' => 'product',
 			'num_items'    => (int) $order->get_item_count(),
 		);
+
+		// Custom parameter (not a Meta standard field): usable in a Custom Conversion rule
+		// such as "Purchase where customer_type = new". The value is never altered.
+		$customer_type = self::get_customer_type( $order );
+		if ( $customer_type ) {
+			$custom_data['customer_type'] = $customer_type;
+		}
+
+		return $custom_data;
 	}
 
 	/**
@@ -465,9 +474,10 @@ class Meta_Api {
 	 * Extract and normalize visitor user_data from current request and cookies for CAPI events.
 	 * Includes automatic generation and deposit of first-party _fbp if missing to bypass adblockers.
 	 *
+	 * @param bool $deposit_fbp Generate and set a first-party _fbp cookie when missing.
 	 * @return array
 	 */
-	public function extract_request_user_data() {
+	public function extract_request_user_data( $deposit_fbp = true ) {
 		$user_data = array();
 
 		// 1. Client IP address (with Cloudflare / Proxy support)
@@ -490,7 +500,7 @@ class Meta_Api {
 
 		// 3. Browser ID (_fbp)
 		$fbp = ! empty( $_COOKIE['_fbp'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['_fbp'] ) ) : '';
-		if ( empty( $fbp ) ) {
+		if ( empty( $fbp ) && $deposit_fbp ) {
 			// Auto-generate first-party _fbp so adblocker visitors have a valid browser ID in CAPI
 			$fbp = 'fb.1.' . round( microtime( true ) * 1000 ) . '.' . wp_rand( 1000000000, 9999999999 );
 			if ( ! headers_sent() ) {
@@ -503,12 +513,8 @@ class Meta_Api {
 			$user_data['fbp'] = $fbp;
 		}
 
-		// 4. Click ID (_fbc) or reconstruction from fbclid
-		$fbc = ! empty( $_COOKIE['_fbc'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) ) : '';
-		if ( empty( $fbc ) && ! empty( $_COOKIE['wfbt_fbclid'] ) ) {
-			$fbclid = sanitize_text_field( wp_unslash( $_COOKIE['wfbt_fbclid'] ) );
-			$fbc    = 'fb.1.' . ( time() * 1000 ) . '.' . $fbclid;
-		}
+		// 4. Click ID (_fbc) or reconstruction from fbclid (click timestamp preserved)
+		$fbc = self::resolve_request_fbc();
 		if ( ! empty( $fbc ) ) {
 			$user_data['fbc'] = $fbc;
 		}
@@ -517,7 +523,7 @@ class Meta_Api {
 		if ( is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			if ( $user && $user->ID ) {
-				$user_data['external_id'] = array( (string) $user->ID );
+				$user_data['external_id'] = array( $this->hash_data( $user->ID ) );
 				if ( ! empty( $user->user_email ) ) {
 					$user_data['em'] = array( $this->hash_data( $user->user_email ) );
 				}
@@ -560,10 +566,108 @@ class Meta_Api {
 				$user_data['ln'] = array( $this->hash_data( $last_name ) );
 			}
 			if ( $customer->get_id() > 0 ) {
-				$user_data['external_id'] = array( (string) $customer->get_id() );
+				$user_data['external_id'] = array( $this->hash_data( $customer->get_id() ) );
 			}
 		}
 
 		return $user_data;
+	}
+
+	/**
+	 * Resolve the click ID from the request cookies.
+	 * Order: Meta _fbc, then wfbt_fbc (canonical value written at landing with the click time),
+	 * then the legacy wfbt_fbclid cookie (pre-2.3.0 visitors, rebuilt with the current time).
+	 *
+	 * @return string
+	 */
+	public static function resolve_request_fbc() {
+		if ( ! empty( $_COOKIE['_fbc'] ) ) {
+			return sanitize_text_field( wp_unslash( $_COOKIE['_fbc'] ) );
+		}
+
+		if ( ! empty( $_COOKIE['wfbt_fbc'] ) ) {
+			$fbc = sanitize_text_field( wp_unslash( $_COOKIE['wfbt_fbc'] ) );
+			if ( preg_match( '/^fb\.1\.\d{10,13}\.\S+$/', $fbc ) ) {
+				return $fbc;
+			}
+		}
+
+		if ( ! empty( $_COOKIE['wfbt_fbclid'] ) ) {
+			$fbclid = sanitize_text_field( wp_unslash( $_COOKIE['wfbt_fbclid'] ) );
+			return 'fb.1.' . ( time() * 1000 ) . '.' . $fbclid;
+		}
+
+		return '';
+	}
+
+	/**
+	 * Hashed customer identifiers for the browser Pixel Advanced Matching (fbq init).
+	 * Same normalization and hashing as the CAPI user_data, flattened to strings.
+	 *
+	 * @param \WC_Order|null $order Validated order (thank-you page), or null for the current visitor.
+	 * @return array
+	 */
+	public function get_advanced_matching_data( $order = null ) {
+		if ( $order instanceof \WC_Order ) {
+			$user_data = $this->extract_user_data( $order );
+		} else {
+			$user_data = $this->extract_request_user_data( false );
+		}
+
+		$matching = array();
+		foreach ( array( 'em', 'ph', 'fn', 'ln', 'ct', 'st', 'zp', 'country', 'external_id' ) as $key ) {
+			if ( ! empty( $user_data[ $key ][0] ) ) {
+				$matching[ $key ] = $user_data[ $key ][0];
+			}
+		}
+
+		return $matching;
+	}
+
+	/**
+	 * New vs returning customer, based on earlier paid orders (customer ID or billing email).
+	 * Computed once and stored in the HPOS order meta _wfbt_customer_type.
+	 *
+	 * @param \WC_Order $order The WooCommerce order.
+	 * @return string 'new', 'returning' or '' when the customer cannot be identified.
+	 */
+	public static function get_customer_type( $order ) {
+		$type = $order->get_meta( '_wfbt_customer_type' );
+		if ( 'new' === $type || 'returning' === $type ) {
+			return $type;
+		}
+
+		$customer_id = (int) $order->get_customer_id();
+		$email       = strtolower( trim( (string) $order->get_billing_email() ) );
+
+		$customers = array();
+		if ( $customer_id > 0 ) {
+			$customers[] = $customer_id;
+		}
+		if ( is_email( $email ) ) {
+			$customers[] = $email;
+		}
+		if ( empty( $customers ) ) {
+			return '';
+		}
+
+		$args = array(
+			'limit'    => 1,
+			'return'   => 'ids',
+			'exclude'  => array( $order->get_id() ),
+			'status'   => array( 'wc-processing', 'wc-completed' ),
+			'customer' => $customers,
+		);
+		if ( $order->get_date_created() ) {
+			$args['date_created'] = '<' . $order->get_date_created()->getTimestamp();
+		}
+
+		$previous = wc_get_orders( $args );
+		$type     = empty( $previous ) ? 'new' : 'returning';
+
+		$order->update_meta_data( '_wfbt_customer_type', $type );
+		$order->save_meta_data();
+
+		return $type;
 	}
 }
