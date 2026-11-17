@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.3.0
+Stable tag: 2.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,9 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.3.1 =
+* **Détection client `new` / `returning` sur statuts logistiques post-paiement** : `Meta_Api::get_customer_type()` interroge désormais les statuts payés dynamiques WooCommerce via `wc_get_is_paid_statuses()` (avec repli défensif sur `processing` et `completed`) au lieu d'une liste figée `wc-processing` / `wc-completed`. Les acheteurs récurrents dont la commande précédente est en statut logistique payé (`ready-for-pickup`, `in-transit`, `shipped`, etc.) sont correctement qualifiés en `returning` dans le Pixel et Meta CAPI.
 
 = 2.3.0 =
 * **Purchase navigateur sécurisé** : sur la page de remerciement, le Pixel n'envoie Purchase que si la clé de commande de l'URL est valide (`key_is_valid`) et que la commande est payée ou dans un statut déclencheur CAPI. Plus de Purchase pour une commande tierce (ID deviné) ni pour une commande en échec ou impayée, qui gonflait le ROAS affiché. Une commande encore en attente au retour de passerelle est envoyée par le CAPI seul (même `event_id`).

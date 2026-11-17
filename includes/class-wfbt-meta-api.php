@@ -651,11 +651,16 @@ class Meta_Api {
 			return '';
 		}
 
+		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : array( 'processing', 'completed' );
+		if ( ! is_array( $paid_statuses ) || empty( $paid_statuses ) ) {
+			$paid_statuses = array( 'processing', 'completed' );
+		}
+
 		$args = array(
 			'limit'    => 1,
 			'return'   => 'ids',
 			'exclude'  => array( $order->get_id() ),
-			'status'   => array( 'wc-processing', 'wc-completed' ),
+			'status'   => $paid_statuses,
 			'customer' => $customers,
 		);
 		if ( $order->get_date_created() ) {

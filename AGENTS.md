@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.3.0)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.3.1)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -172,7 +172,7 @@ Sur la page `is_order_received_page()` :
 | `_wfbt_capi_status` | `string` | Statut CAPI (`Pending`, `Success`, `Failed`, `Ignored (Consent Denied)`, `Ignored (Insufficient Customer Data)`). |
 | `_wfbt_capi_sent_at` | `string` | Horodatage MySQL de la transmission réussie vers Meta. |
 | `_wfbt_capi_error` | `string` | Détail de l'erreur API ou réseau en cas d'échec. |
-| `_wfbt_customer_type` | `string` | `new` ou `returning` (v2.3.0), calculé une fois au premier Purchase construit (Pixel ou CAPI) d'après les commandes `processing` / `completed` antérieures (ID client OU email). Envoyé en paramètre personnalisé `customer_type`. |
+| `_wfbt_customer_type` | `string` | `new` ou `returning` (v2.3.0+, élargi en v2.3.1), calculé une fois au premier Purchase construit (Pixel ou CAPI) d'après les commandes antérieures en statut payé `wc_get_is_paid_statuses()` (ID client OU email, incluant les statuts logistiques post-paiement). Envoyé en paramètre personnalisé `customer_type`. |
 
 **Cookies et clés de session utilisés côté front :**
 
@@ -352,7 +352,7 @@ Objectif : augmenter le ROAS en fiabilisant les conversions déclarées et leur 
 - **Advanced Matching** (`Public_Handler::get_advanced_matching_data()` → `Meta_Api::get_advanced_matching_data()`) : 3e argument de `fbq('init')` avec `em`, `ph`, `fn`, `ln`, `ct`, `st`, `zp`, `country`, `external_id` déjà hachés SHA-256 (même code que le CAPI). Limité à `is_checkout()` (inclut la page de remerciement) car ces pages ne sont jamais servies par le cache Edge : aucun hash client ne peut être mis en cache pour un autre visiteur. Appel de `extract_request_user_data( false )` : aucun `_fbp` serveur déposé par ce chemin.
 - **`external_id` haché** sur tous les événements CAPI et le Pixel (avant v2.3.0 : ID brut côté CAPI). Le Pixel ne re-hache pas une valeur SHA-256 de 64 caractères hexadécimaux, les deux côtés sont donc identiques.
 - **Horodatage fbc** : avant v2.3.0, `fb.1.{time()}.{fbclid}` utilisait l'heure de la commande. Désormais la date du clic est conservée (cookie `wfbt_fbc`, `localStorage wfbt_fbclid_ts`).
-- **Segmentation client** (`Meta_Api::get_customer_type()`) : `wc_get_orders` (`limit 1`, `return ids`, `exclude` commande courante, statuts `wc-processing` / `wc-completed`, `customer => [ID, email]`, `date_created < date de la commande`), stocké via `save_meta_data()`. Paramètre **personnalisé** `customer_type` : `customer_segmentation` / `new_customer_to_business` n'apparaît pas dans la documentation officielle Meta des `custom_data` (vérifié le 28/10/2026), ne pas l'utiliser sans preuve.
+- **Segmentation client** (`Meta_Api::get_customer_type()`) : `wc_get_orders` (`limit 1`, `return ids`, `exclude` commande courante, statuts issus de `wc_get_is_paid_statuses()` avec repli défensif `['processing', 'completed']` depuis v2.3.1 — couvrant `ready-for-pickup`, `in-transit`, `shipped`, etc., `customer => [ID, email]`, `date_created < date de la commande`), stocké via `save_meta_data()`. Paramètre **personnalisé** `customer_type` : `customer_segmentation` / `new_customer_to_business` n'apparaît pas dans la documentation officielle Meta des `custom_data` (vérifié le 28/10/2026), ne pas l'utiliser sans preuve.
 - **Écarté volontairement (ne pas réintroduire sans accord de Julien)** :
   - Cookies 400 jours + restauration localStorage → cookie : sans effet sous ITP (cookies JS plafonnés à 7 jours, localStorage purgé après 7 jours sans visite), fenêtre d'attribution Meta par défaut de 7 jours, et 400 j dépasse les 13 mois CNIL.
   - Cross-device stitching (transients par email, `user_meta`) : Meta rapproche déjà via `em` / `ph` hachés, cas couvert étroit, écritures en base à chaque `update_order_review`, attribution erronée sur email partagé.
@@ -360,10 +360,11 @@ Objectif : augmenter le ROAS en fiabilisant les conversions déclarées et leur 
 
 ---
 
-## 6. 📌 Suivi & Backlog (au 28/10/2026)
+## 6. 📌 Suivi & Backlog (au 17/11/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
+| Release v2.3.1 (`Meta_Api::get_customer_type()` aligné sur `wc_get_is_paid_statuses()` pour les statuts logistiques post-paiement type Conforama.re : `ready-for-pickup`, `in-transit`, `shipped`) | ✅ Publiée le 17/11/2026 | Mettre à jour via PUC sur Conforama.re et les sites à statuts logistiques personnalisés + purger les caches |
 | Release v2.3.0 (Purchase sécurisé clé + statut payé, Advanced Matching Pixel, `external_id` haché, horodatage `fbc`, `customer_type`, traductions fr_FR complètes) | ✅ Publiée le 28/10/2026 | Sur chaque site : mise à jour PUC + purge cache, « Tester les événements » (Advanced Matching sur Purchase, `customer_type`, déduplication). Suivre l'EMQ Purchase et le ratio Purchase Meta / commandes payées sur 7 à 14 jours |
 | Meta : conversion personnalisée « Purchase où customer_type = new » + définitions clients existants Advantage+ | ⏳ À faire dans le Gestionnaire d'événements / Ads Manager | Aucun code requis |
 | Release v2.2.1 (AddToCart CAPI gonflé par les robots, consentement `denied` seul bloquant, signal `wfbt_js`, anti-doublon 10 min) | ✅ Publiée le 12/10/2026 (commit `79c82da`, tag `v2.2.1`) | comptoirdecambaie.re : mise à jour PUC + purge cache Rocket.net, test « Tester les événements », contrôle sur 48 h : ATC serveur ≤ ATC navigateur × 1,2 |
