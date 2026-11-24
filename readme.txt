@@ -4,7 +4,7 @@ Tags: woocommerce, meta, facebook, pixel, capi, server-side, tracking, conversio
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 2.3.1
+Stable tag: 2.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,7 +18,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 * **Déduplication parfaite à 100%** : Strict partage des mêmes identifiants `eventID` (`order_{id}`, `atc_*`, `ic_*`) entre le front-end et le serveur.
 * **Conformité RGPD Multi-Bannières** : Reconnaissance automatique de la bannière native Woo Gads (`woo_gads_consent`) et de Concord, avec activation à chaud sans rechargement de page et annulation sécurisée en cas de refus.
 * **WooCommerce HPOS (High-Performance Order Storage)** : Déclaration de compatibilité et utilisation exclusive des méthodes CRUD de l'objet `$order`.
-* **Normalisation E.164 Réunion** : Conversion automatique des numéros réunionnais (`0692`, `0693`, `0262` -> `+262`) et français (`+33`) avant hachage SHA-256.
+* **Normalisation E.164 ARCEP (Océan Indien, DOM & Métropole)** : Conversion automatique des préfixes La Réunion / Mayotte (`0692`, `0693`, `0262`, `0263`, `0639`, `0269` -> `262`), DOM (`590`, `594`, `596`) et France métropolitaine (`33`) avant hachage SHA-256, avec rejet strict des numéros spéciaux `08` et formats invalides.
 * **Mises à jour automatiques** : Détection et installation transparente des nouvelles versions depuis les releases GitHub.
 
 == Installation ==
@@ -28,6 +28,10 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une architectu
 3. Rendez-vous dans **WooCommerce > Meta Tracking** pour renseigner votre Pixel ID et votre Jeton d'accès CAPI.
 
 == Changelog ==
+
+= 2.3.2 =
+* **Protection stricte contre le préfixe de cookie de consentement vide (`wfbt_concord_cookie_name`)** : lorsqu'une chaîne vide `""` était enregistrée dans `wp_options` (sites utilisant la bannière native `woo_gads_consent`), `cName.indexOf("")` en JS et `stripos($cookie_name, "")` en PHP 8 matchaient 100 % des cookies du domaine, déclenchant à tort le Pixel sur tout cookie tiers valant `"true"` ou forçant `_wfbt_consent = 'denied'` sur tout cookie tiers valant `"false"`. Le plugin applique désormais un repli systématique vers `'concord'`, normalise l'option à l'enregistrement (`sanitize_concord_cookie_name`), protège le décodage URI et exclut explicitement les cookies techniques internes (`woo_gads_consent`, `wfbt_js`, `_fbp`, `_fbc`, `wfbt_fbc`, `wfbt_fbclid`) de la boucle Priorité 2.
+* **Normalisation téléphonique E.164 ARCEP étendue (Océan Indien, DOM & Métropole)** : `Meta_Api::format_phone_e164()` reconnaît désormais l'intégralité des préfixes Océan Indien (`0692`, `0693`, `0262`, `0263` La Réunion et `0639`, `0269` Mayotte -> `262...` quel que soit le pays `FR`/`RE`/`YT`), les préfixes DOM (`0690`/`0691`/`0590` -> `590`, `0696`/`0697`/`0596` -> `596`, `0694`/`0594` -> `594`), les mobiles métropolitains `0[67]` saisis avec une adresse `RE`/`YT` (`33...`), les notations `+33(0)...` / `+262(0)...` / espaces insécables UTF-8, et rejette proprement (`''`) les numéros spéciaux `08` ainsi que toute chaîne invalide avant hachage SHA-256.
 
 = 2.3.1 =
 * **Détection client `new` / `returning` sur statuts logistiques post-paiement** : `Meta_Api::get_customer_type()` interroge désormais les statuts payés dynamiques WooCommerce via `wc_get_is_paid_statuses()` (avec repli défensif sur `processing` et `completed`) au lieu d'une liste figée `wc-processing` / `wc-completed`. Les acheteurs récurrents dont la commande précédente est en statut logistique payé (`ready-for-pickup`, `in-transit`, `shipped`, etc.) sont correctement qualifiés en `returning` dans le Pixel et Meta CAPI.

@@ -1,4 +1,4 @@
-# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.3.1)
+# Fichier de Contexte : Woo FB Tracking Server-Side (Architecture Hybride Native v2.3.2)
 
 > [!IMPORTANT]
 > **Consigne de mise à jour :** Ce fichier `AGENTS.md` sert de référence contextuelle absolue pour comprendre le fonctionnement global et les spécificités techniques du plugin. **À chaque fois que vous modifiez le code du projet, vous devez impérativement mettre à jour ce fichier pour refléter les changements effectués.**
@@ -20,7 +20,7 @@ Ce plugin transforme le suivi e-commerce WooCommerce pour Meta en une **architec
 6. **Garde Pré-Vol CAPI & Anti-Erreur 400** : Vérification stricte de la présence d'au moins un identifiant direct client (`em`, `ph`, `fbp`, `fbc`, `external_id`). Si aucun n'est présent (ex: commandes manuelles sans coordonnées), l'événement est court-circuité avec le statut `Ignored (Insufficient Customer Data)`, évitant le code d'erreur Meta 100 / sous-code 2804050 et les alertes email intempestives.
 7. **Enrichissement Event Match Quality (`external_id`)** : Transmission du Customer ID WooCommerce (`$order->get_customer_id()` ou session client) pour maximiser la correspondance Meta.
 8. **Compatibilité native WooCommerce HPOS (High-Performance Order Storage)** : Bannissement total de l'ancienne API post-meta au profit exclusif des méthodes CRUD de l'objet `$order` (`custom_order_tables`).
-9. **Normalisation E.164 avancée (La Réunion + France)** : Nettoyage et conversion automatique des préfixes réunionnais (`0692`, `0693`, `0262` $\rightarrow$ `+262`) et métropolitains (`+33`) avant hachage SHA-256.
+9. **Normalisation E.164 avancée ARCEP (Océan Indien + DOM + France)** : Nettoyage (espaces insécables UTF-8, marques bidi iOS/WhatsApp, parenthèses `+33(0)` / `+262(0)`) et conversion automatique des préfixes Océan Indien (`0692`, `0693`, `0262`, `0263`, `0639`, `0269` $\rightarrow$ `262`), DOM (`590`, `594`, `596`) et métropolitains (`33`), avec rejet strict (`''`) des numéros spéciaux `08` et chaînes invalides avant hachage SHA-256.
 10. **Tableau de Bord Exécutif de Diagnostics & Barre de Débogage Front-End (Désactivée par défaut / On-Demand)** : Grille pré-vol complète avec indicateur d'événements CAPI, inspecteur de cookies de session active (`woo_gads_consent`, `concord`, `_fbp`, `_fbc`), testeur de santé Meta Graph API v21.0 (`GET /{pixel_id}`), KPIs HPOS 30 jours, histogramme d'activité 14 jours en pur SVG vectoriel natif (zéro librairie JS externe), et barre de débogage flottante admin avec étiquetage explicite de la source des AddToCart (`fragment`, `endpoint`, `page_render`, `endpoint_cache_bypass`, `dom`).
 11. **Filtrage anti-robots & ajouts programmatiques (v2.2.1)** : aucun AddToCart (navigateur ni CAPI) pour les robots (User-Agent, filtre `wfbt_is_bot_request`), cron, WP-CLI, REST hors Store API, admin hors AJAX et restauration de panier abandonné (`?wcf_ac_token`). Le CAPI AddToCart exige en plus un signal navigateur réel (cookie technique `wfbt_js` ou `_fbp`) et un anti-doublon serveur de 10 min par produit/variation.
 12. **Qualité du Purchase et du matching (v2.3.0)** : Purchase navigateur conditionné à une clé de commande valide et à une commande payée (ou en statut déclencheur), Advanced Matching Pixel haché sur checkout + remerciement, `external_id` haché identique Pixel/CAPI, horodatage `fbc` = date réelle du clic (cookie `wfbt_fbc`), segmentation `customer_type` (`new` / `returning`) sur Purchase. Voir §5.N.
@@ -200,10 +200,13 @@ Sur la page `is_order_received_page()` :
 - L'utilisation des anciennes fonctions WordPress `get_post_meta()` provoque des requêtes fantômes dans `wp_postmeta` qui ne contiennent pas les données à jour.
 - **Règle** : Toujours manipuler `$order->get_meta()`, `$order->update_meta_data()`, `$order->delete_meta_data()` et `$order->save()`.
 
-### C. Normalisation E.164 pour La Réunion (974)
-- La Réunion utilise l'indicatif international `+262`.
-- Les numéros locaux saisis par les clients débutent fréquemment par `0692`, `0693` (mobiles) ou `0262` (fixes). Si ces numéros étaient préfixés par l'indicatif métropolitain `+33` (erreur courante de plugins anglophones), Meta serait incapable de les faire correspondre aux profils des acheteurs.
-- L'algorithme dédié dans `Meta_Api::format_phone_e164` garantit un formatage propre `262692...` avant hachage SHA-256.
+### C. Normalisation E.164 ARCEP pour l'Océan Indien (974 / 976), les DOM et la Métropole (v2.3.2)
+- La Réunion et Mayotte partagent l'indicatif international `+262` (format Meta E.164 sans `+` : `262` + 9 chiffres).
+- `Meta_Api::format_phone_e164( $phone, $country_code )` couvre l'ensemble du plan de numérotation ARCEP :
+  - **Océan Indien (`262`)** : `0(692|693|262|263|639|269)XXXXXX` (ainsi que `2620?...`, `330?...` erronés ou format local 9 chiffres) $\rightarrow$ `'262'` + 9 chiffres, quel que soit le pays (`FR`, `RE`, `YT`).
+  - **DOM (`590`, `596`, `594`)** : `0(690|691|590)` $\rightarrow$ `590...`, `0(696|697|596)` $\rightarrow$ `596...`, `0(694|594)` $\rightarrow$ `594...`.
+  - **France métropolitaine (`33`)** : `0[1-79]XXXXXXXX` avec pays `FR` (ou vide) $\rightarrow$ `33...`, et mobiles métropolitains `0[67]XXXXXXXX` (hors DOM) utilisés avec pays `RE`/`YT`/DOM $\rightarrow$ `33...`. Les numéros spéciaux `08` retournent `''`.
+  - **Internationaux & Rejet propre** : les numéros internationaux déjà préfixés valides (`^[1-9][0-9]{6,14}$`) sont conservés sans `+` ; toute autre chaîne invalide retourne `''` afin de ne jamais hacher un faux numéro.
 
 ### D. Internationalisation (i18n) & Compatibilité Loco Translate
 - **Textes sources en anglais par défaut** : Tous les textes utilisateur du code PHP et JS sont rédigés en anglais et enveloppés dans les fonctions standards WordPress (`__( '...', 'wfbt-server-side' )`, `esc_html__()`, etc.).
@@ -358,12 +361,23 @@ Objectif : augmenter le ROAS en fiabilisant les conversions déclarées et leur 
   - Cross-device stitching (transients par email, `user_meta`) : Meta rapproche déjà via `em` / `ph` hachés, cas couvert étroit, écritures en base à chaque `update_order_review`, attribution erronée sur email partagé.
   - Seuil minimum, pondération ou blocage des clients existants, événement `NewCustomerPurchase` : le Pixel (souvent retenu par Meta à la déduplication) garde la valeur réelle, et sous-déclarer le CA dégrade le ROAS affiché et l'apprentissage. Le pilotage nouveaux clients se fait dans Meta : définitions « clients existants » + plafond de budget Advantage+, conversion personnalisée sur `customer_type = new`.
 
+### O. Blindage du Préfixe de Cookie Vide & Normalisation ARCEP E.164 (v2.3.2)
+
+Constat jardin-naturel.re (nov. 2026) :
+1. **Piège `get_option(..., 'concord')` après sauvegarde vide via `options.php`** :
+   - Sur les boutiques utilisant la bannière native `woo_gads_consent`, si le champ `wfbt_concord_cookie_name` était vidé et enregistré, WordPress stockait `""` dans `wp_options` (`get_option()` ne renvoie son 2e argument que si l'option est absente en base).
+   - Tant que le visiteur n'avait pas interagi avec la bannière (`woo_gads_consent` absent), la boucle Priorité 2 exécutait `cName.indexOf("") !== -1` en JS et `stripos($cookie_name, "") !== false` en PHP 8 (qui retourne `0`, donc vrai !), matchant 100 % des cookies du domaine : tout cookie tiers valant `"true"` déclenchait le Pixel sans consentement, et tout cookie tiers valant `"false"` forçait `_wfbt_consent = 'denied'` au lieu de `'unknown'`, annulant l'envoi CAPI.
+   - **Correctif** : `Public_Handler::get_concord_cookie_prefix()` et `Admin_Settings::sanitize_concord_cookie_name()` imposent un repli sur `'concord'` dès que la valeur nettoyée est vide, protègent `decodeURIComponent` contre les séquences URI malformées, coupent uniquement sur le premier `=` et excluent explicitement les cookies techniques internes (`woo_gads_consent`, `wfbt_js`, `_fbp`, `_fbc`, `wfbt_fbc`, `wfbt_fbclid`) en Priorité 2.
+2. **Couverture ARCEP complète dans `Meta_Api::format_phone_e164()`** :
+   - Ajout de `0263` (fixe Réunion), `0639`/`0269` (Mayotte), des DOM (`590`, `594`, `596`), gestion de `+33(0)`/`+262(0)` et des espaces insécables/bidi UTF-8, conservation des mobiles métropolitains `0[67]` sur adresse `RE`/`YT`, exclusion des `08` et retour strict `''` sur tout numéro invalide.
+
 ---
 
-## 6. 📌 Suivi & Backlog (au 17/11/2026)
+## 6. 📌 Suivi & Backlog (au 24/11/2026)
 
 | Sujet | État | Action |
 | :--- | :--- | :--- |
+| Release v2.3.2 (Protection stricte contre le préfixe `wfbt_concord_cookie_name` vide en JS/PHP 8 + exclusion cookies internes + normalisation téléphonique E.164 ARCEP Océan Indien / DOM / Métropole et rejet `''` des numéros invalides/`08`) | ✅ Publiée le 24/11/2026 | Mise à jour en 1 clic sur jardin-naturel.re + déploiement progressif via PUC sur l'ensemble du parc SOYOO |
 | Release v2.3.1 (`Meta_Api::get_customer_type()` aligné sur `wc_get_is_paid_statuses()` pour les statuts logistiques post-paiement type Conforama.re : `ready-for-pickup`, `in-transit`, `shipped`) | ✅ Publiée le 17/11/2026 | Mettre à jour via PUC sur Conforama.re et les sites à statuts logistiques personnalisés + purger les caches |
 | Release v2.3.0 (Purchase sécurisé clé + statut payé, Advanced Matching Pixel, `external_id` haché, horodatage `fbc`, `customer_type`, traductions fr_FR complètes) | ✅ Publiée le 28/10/2026 | Sur chaque site : mise à jour PUC + purge cache, « Tester les événements » (Advanced Matching sur Purchase, `customer_type`, déduplication). Suivre l'EMQ Purchase et le ratio Purchase Meta / commandes payées sur 7 à 14 jours |
 | Meta : conversion personnalisée « Purchase où customer_type = new » + définitions clients existants Advantage+ | ⏳ À faire dans le Gestionnaire d'événements / Ads Manager | Aucun code requis |

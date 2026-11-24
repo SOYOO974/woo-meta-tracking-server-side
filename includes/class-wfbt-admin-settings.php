@@ -66,7 +66,13 @@ class Admin_Settings {
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_capi_ic', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_debug_bar', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_respect_consent', array( 'sanitize_callback' => 'sanitize_text_field' ) );
-		register_setting( 'wfbt_settings_group', 'wfbt_concord_cookie_name', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting(
+			'wfbt_settings_group',
+			'wfbt_concord_cookie_name',
+			array(
+				'sanitize_callback' => array( __CLASS__, 'sanitize_concord_cookie_name' ),
+			)
+		);
 		register_setting( 'wfbt_settings_group', 'wfbt_consent_action', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'wfbt_settings_group', 'wfbt_trigger_statuses' );
 		register_setting( 'wfbt_settings_group', 'wfbt_enable_alerts', array( 'sanitize_callback' => 'sanitize_text_field' ) );
@@ -80,6 +86,31 @@ class Admin_Settings {
 				},
 			)
 		);
+	}
+
+	/**
+	 * Sanitize Concord / custom cookie prefix option.
+	 * Preserves 'concord' as default when left blank (unless 'woo_gads_consent' or a custom prefix is explicitly provided).
+	 *
+	 * @param mixed $value Raw input value.
+	 * @return string Sanitized non-empty cookie prefix.
+	 */
+	public static function sanitize_concord_cookie_name( $value ) {
+		$clean = trim( sanitize_text_field( (string) $value ) );
+		if ( '' === $clean ) {
+			return 'concord';
+		}
+		return $clean;
+	}
+
+	/**
+	 * Resolve effective Concord / custom cookie prefix for admin display & diagnostics.
+	 *
+	 * @return string
+	 */
+	private static function get_concord_cookie_name_value() {
+		$raw = trim( (string) get_option( 'wfbt_concord_cookie_name', 'concord' ) );
+		return '' === $raw ? 'concord' : $raw;
 	}
 
 	/**
@@ -180,20 +211,33 @@ class Admin_Settings {
 
 				// 3. In-Browser Cookie Inspector
 				function checkBrowserCookies() {
-					var cookies = document.cookie;
-					function getCookieVal(prefix) {
+					var cookies = document.cookie || '';
+					function getCookieVal(prefix, exact) {
+						if (!prefix) return null;
+						var internal = { 'woo_gads_consent': 1, 'wfbt_js': 1, '_fbp': 1, '_fbc': 1, 'wfbt_fbc': 1, 'wfbt_fbclid': 1 };
 						var parts = cookies.split(';');
+						var needle = String(prefix).toLowerCase();
 						for (var i = 0; i < parts.length; i++) {
-							var p = parts[i].trim().split('=');
-							if (p[0].toLowerCase().indexOf(prefix.toLowerCase()) !== -1) {
-								return p[1] ? decodeURIComponent(p[1]) : 'present';
+							var raw = parts[i].trim();
+							if (!raw) continue;
+							var eq = raw.indexOf('=');
+							var cName = (eq !== -1 ? raw.substring(0, eq) : raw).toLowerCase();
+							var cRawVal = eq !== -1 ? raw.substring(eq + 1) : '';
+							if (!exact && internal[cName]) continue;
+							if (exact ? (cName === needle) : (cName.indexOf(needle) !== -1)) {
+								if (!cRawVal) return 'present';
+								try {
+									return decodeURIComponent(cRawVal);
+								} catch(e) {
+									return cRawVal;
+								}
 							}
 						}
 						return null;
 					}
 
 					// Native Woo Gads Cookie ('woo_gads_consent')
-					var gadsCookie = getCookieVal('woo_gads_consent');
+					var gadsCookie = getCookieVal('woo_gads_consent', true);
 					if (gadsCookie && gadsCookie !== 'present') {
 						try {
 							var gadsData = JSON.parse(gadsCookie);
@@ -223,15 +267,15 @@ class Admin_Settings {
 					}
 
 					// _fbp
-					var fbpVal = getCookieVal('_fbp');
+					var fbpVal = getCookieVal('_fbp', true);
 					if (fbpVal) {
 						$('#wfbt-cookie-fbp-box').html('<span style=\"color:#007cba; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">' + (fbpVal.substring(0, 24) + '...') + '</code>');
 					} else {
 						$('#wfbt-cookie-fbp-box').html('<span style=\"color:#888;\">' + wfbt_i18n.cookie_missing + '</span>');
 					}
 
-					// _fbc / wfbt_fbclid
-					var fbcVal = getCookieVal('_fbc') || getCookieVal('wfbt_fbclid');
+					// _fbc / wfbt_fbc / wfbt_fbclid
+					var fbcVal = getCookieVal('_fbc', true) || getCookieVal('wfbt_fbc', true) || getCookieVal('wfbt_fbclid', true);
 					if (fbcVal) {
 						$('#wfbt-cookie-fbc-box').html('<span style=\"color:#007cba; font-weight:600;\">' + wfbt_i18n.cookie_found + '</span><br><code style=\"font-size:11px; background:#f0f0f1; padding:2px 4px; border-radius:3px;\">' + (fbcVal.substring(0, 24) + '...') + '</code>');
 					} else {
@@ -395,7 +439,7 @@ class Admin_Settings {
 		$enable_capi_atc     = get_option( 'wfbt_enable_capi_atc', 'yes' );
 		$enable_capi_ic      = get_option( 'wfbt_enable_capi_ic', 'yes' );
 		$respect_consent     = get_option( 'wfbt_respect_consent', 'yes' );
-		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$concord_cookie_name = self::get_concord_cookie_name_value();
 		$trigger_statuses    = get_option( 'wfbt_trigger_statuses', array( 'processing', 'completed' ) );
 		if ( ! is_array( $trigger_statuses ) ) {
 			$trigger_statuses = array( 'processing', 'completed' );
@@ -577,7 +621,7 @@ class Admin_Settings {
 		$enable_pixel = get_option( 'wfbt_enable_pixel', 'yes' );
 		$debug_bar    = get_option( 'wfbt_enable_debug_bar', 'no' );
 		$respect_c    = get_option( 'wfbt_respect_consent', 'yes' );
-		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$cookie_name  = self::get_concord_cookie_name_value();
 
 		// Detect native Woo Gads Cookie Banner
 		$gads_settings   = get_option( 'woo_gads_settings', array() );

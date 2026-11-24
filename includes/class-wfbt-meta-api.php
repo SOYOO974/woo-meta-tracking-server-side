@@ -248,69 +248,102 @@ class Meta_Api {
 
 	/**
 	 * Formats a phone number to strict E.164 international standard without leading plus sign.
-	 * Specific handling for La Réunion (262) and Metropolitan France (33).
+	 * Specific ARCEP handling for Indian Ocean (La Réunion & Mayotte -> 262), DOM (590, 594, 596),
+	 * Metropolitan France (33), and valid international numbers, returning '' on unrecognized input.
 	 *
 	 * @param string $phone Raw phone string.
 	 * @param string $country_code 2-letter ISO country code.
-	 * @return string Normalized digits.
+	 * @return string Normalized E.164 digits without '+', or '' if invalid.
 	 */
 	public function format_phone_e164( $phone, $country_code = '' ) {
-		if ( empty( $phone ) ) {
+		if ( empty( $phone ) || ! is_scalar( $phone ) ) {
 			return '';
 		}
 
-		// Remove all non-numeric characters except leading plus
-		$cleaned = preg_replace( '/[^\d+]/', '', trim( $phone ) );
-		$cleaned = ltrim( $cleaned, '+' );
+		$raw = trim( (string) $phone );
 
-		// Remove leading international double zeros '00'
-		if ( 0 === strpos( $cleaned, '00' ) ) {
+		// Strip ASCII whitespace, UTF-8 non-breaking spaces, invisible bidi marks, dots, and dashes.
+		$cleaned = preg_replace( '/[\s\p{Zs}\p{Cf}.\-\x{2013}\x{2014}]+/u', '', $raw );
+		if ( null === $cleaned ) {
+			$cleaned = str_replace( array( "\xC2\xA0", "\xE2\x80\xAF", ' ', "\t", "\n", "\r", '.', '-' ), '', $raw );
+		}
+
+		// Handle international trunk (0) notation, e.g. +33(0)6..., +262(0)692..., 0033(0)6...
+		$cleaned = preg_replace( '/(?<=\d)\(0\)/', '', $cleaned );
+		$cleaned = str_replace( array( '(', ')' ), '', $cleaned );
+
+		// Strip leading '+' or international '00' prefix.
+		if ( 0 === strpos( $cleaned, '+' ) ) {
+			$cleaned = substr( $cleaned, 1 );
+		} elseif ( 0 === strpos( $cleaned, '00' ) ) {
 			$cleaned = substr( $cleaned, 2 );
 		}
 
-		$country = strtoupper( trim( $country_code ) );
+		if ( '' === $cleaned || ! preg_match( '/^\d+$/', $cleaned ) ) {
+			return '';
+		}
 
-		// 1. La Réunion numbers: 0692, 0693, 0262 (10 digits) -> convert to 262692..., 262693..., 262262...
-		if ( preg_match( '/^0(692|693|262)(\d{6})$/', $cleaned, $matches ) ) {
+		$country = strtoupper( trim( (string) $country_code ) );
+
+		// Explicitly exclude French special / toll-free / surtaxed 08 numbers.
+		if ( preg_match( '/^(?:0|330?)8\d{8}$/', $cleaned ) ) {
+			return '';
+		}
+
+		// 1. ARCEP Indian Ocean (La Réunion 974 & Mayotte 976):
+		// 0(692|693|262|263|639|269)XXXXXX or already prefixed 262... / mistaken 33... -> 262 + 9 digits regardless of country.
+		if ( preg_match( '/^(?:0|2620?|330?)(692|693|262|263|639|269)(\d{6})$/', $cleaned, $matches ) ) {
 			return '262' . $matches[1] . $matches[2];
 		}
 
-		// Réunion local format without leading zero: 692XXXXXX, 693XXXXXX, 262XXXXXX (9 digits)
-		if ( 'RE' === $country && preg_match( '/^(692|693|262)(\d{6})$/', $cleaned, $matches ) ) {
+		// Indian Ocean 9-digit local format without leading zero (e.g. 692123456).
+		if ( preg_match( '/^(692|693|262|263|639|269)(\d{6})$/', $cleaned, $matches ) ) {
 			return '262' . $matches[1] . $matches[2];
 		}
 
-		// Already has 262 prefix: 262692XXXXXX, 262693XXXXXX, 262262XXXXXX (12 digits)
-		if ( preg_match( '/^262(692|693|262)\d{6}$/', $cleaned ) ) {
+		// 2. ARCEP French Overseas Departments (DOM):
+		// Guadeloupe / Saint-Martin / Saint-Barthélemy: 0(690|691|590) -> 590 + 9 digits.
+		if ( preg_match( '/^(?:0|5900?|330?)(690|691|590)(\d{6})$/', $cleaned, $matches ) ) {
+			return '590' . $matches[1] . $matches[2];
+		}
+
+		// Martinique: 0(696|697|596) -> 596 + 9 digits.
+		if ( preg_match( '/^(?:0|5960?|330?)(696|697|596)(\d{6})$/', $cleaned, $matches ) ) {
+			return '596' . $matches[1] . $matches[2];
+		}
+
+		// French Guiana: 0(694|594) -> 594 + 9 digits.
+		if ( preg_match( '/^(?:0|5940?|330?)(694|594)(\d{6})$/', $cleaned, $matches ) ) {
+			return '594' . $matches[1] . $matches[2];
+		}
+
+		// 3. Metropolitan France:
+		// Already prefixed with 33 (e.g. +33 6 12 34 56 78 or +33 06 12 34 56 78).
+		if ( preg_match( '/^330?([1-79]\d{8})$/', $cleaned, $matches ) ) {
+			return '33' . $matches[1];
+		}
+
+		// National 0[1-79]XXXXXXXX with country FR (or unspecified country).
+		if ( in_array( $country, array( 'FR', '' ), true ) && preg_match( '/^0([1-79]\d{8})$/', $cleaned, $matches ) ) {
+			return '33' . $matches[1];
+		}
+
+		// Metropolitan mobiles 0[67]XXXXXXXX (non-DOM) used with overseas billing country (RE, YT, GP, MQ, GF, BL, MF).
+		if ( in_array( $country, array( 'RE', 'YT', 'GP', 'MQ', 'GF', 'BL', 'MF' ), true ) && preg_match( '/^0([67]\d{8})$/', $cleaned, $matches ) ) {
+			return '33' . $matches[1];
+		}
+
+		// Reject malformed/truncated French or DOM international numbers (33, 262, 590, 594, 596) before general E.164 fallback.
+		if ( preg_match( '/^(?:33|262|590|594|596)/', $cleaned ) ) {
+			return '';
+		}
+
+		// 4. Valid already-prefixed international numbers (7 to 15 digits, E.164 without '+').
+		if ( preg_match( '/^[1-9][0-9]{6,14}$/', $cleaned ) ) {
 			return $cleaned;
 		}
 
-		// 2. Metropolitan France numbers: 06, 07, 01-05, 09 (10 digits) -> convert to 33...
-		if ( preg_match( '/^0([1-79])(\d{8})$/', $cleaned, $matches ) ) {
-			return '33' . $matches[1] . $matches[2];
-		}
-
-		// Already has 33 prefix: 33[1-79]XXXXXXXX (11 digits)
-		if ( preg_match( '/^33([1-79])\d{8}$/', $cleaned ) ) {
-			return $cleaned;
-		}
-
-		// 3. Fallback for ISO RE starting with 0
-		if ( 'RE' === $country && '0' === substr( $cleaned, 0, 1 ) ) {
-			return '262' . substr( $cleaned, 1 );
-		}
-
-		// 4. Fallback for ISO FR starting with 0
-		if ( 'FR' === $country && '0' === substr( $cleaned, 0, 1 ) ) {
-			return '33' . substr( $cleaned, 1 );
-		}
-
-		// 5. General valid international length (8 to 15 digits)
-		if ( strlen( $cleaned ) >= 8 && strlen( $cleaned ) <= 15 && '0' !== substr( $cleaned, 0, 1 ) ) {
-			return $cleaned;
-		}
-
-		return $cleaned;
+		return '';
 	}
 
 	/**

@@ -64,7 +64,7 @@ class Public_Handler {
 		}
 
 		$respect_consent     = get_option( 'wfbt_respect_consent', 'yes' );
-		$concord_cookie_name = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$concord_cookie_name = self::get_concord_cookie_prefix();
 
 		// Prepare dynamic page event data.
 		$event_data    = self::get_page_event_data();
@@ -82,9 +82,26 @@ class Public_Handler {
 
 			var wfbt_pixel_id = <?php echo wp_json_encode( esc_attr( $pixel_id ) ); ?>;
 			var wfbt_respect_consent = <?php echo wp_json_encode( 'yes' === $respect_consent ); ?>;
-			var wfbt_concord_prefix = <?php echo wp_json_encode( strtolower( esc_attr( $concord_cookie_name ) ) ); ?>;
+			var wfbt_concord_prefix = <?php echo wp_json_encode( $concord_cookie_name ); ?>;
 			var wfbt_page_events = <?php echo wp_json_encode( $event_data ); ?>;
 			var wfbt_matching = <?php echo wp_json_encode( empty( $matching_data ) ? new \stdClass() : $matching_data ); ?>;
+			var wfbt_internal_cookies = {
+				'woo_gads_consent': 1,
+				'wfbt_js': 1,
+				'_fbp': 1,
+				'_fbc': 1,
+				'wfbt_fbc': 1,
+				'wfbt_fbclid': 1
+			};
+
+			function wfbtSafeDecode(rawVal) {
+				if (!rawVal) return '';
+				try {
+					return decodeURIComponent(rawVal);
+				} catch(e) {
+					return rawVal;
+				}
+			}
 
 			// Helper: Get marketing consent details and state across supported banners
 			function wfbtGetConsentInfo() {
@@ -92,13 +109,15 @@ class Public_Handler {
 					return { hasConsent: true, source: 'unrestricted' };
 				}
 
-				var cookies = document.cookie.split(';');
+				var cookies = document.cookie ? document.cookie.split(';') : [];
 
 				// Priority 1: Native Woo Gads Cookie Banner ('woo_gads_consent')
 				for (var i = 0; i < cookies.length; i++) {
-					var parts = cookies[i].trim().split('=');
-					if (parts[0] === 'woo_gads_consent') {
-						var val = parts[1] ? decodeURIComponent(parts[1]) : '';
+					var rawCookie = cookies[i].trim();
+					var eqIdx = rawCookie.indexOf('=');
+					var name = eqIdx !== -1 ? rawCookie.substring(0, eqIdx) : rawCookie;
+					if (name === 'woo_gads_consent') {
+						var val = eqIdx !== -1 ? wfbtSafeDecode(rawCookie.substring(eqIdx + 1)) : '';
 						try {
 							var payload = JSON.parse(val);
 							if (payload && typeof payload.marketing !== 'undefined') {
@@ -112,22 +131,30 @@ class Public_Handler {
 					}
 				}
 
-				// Priority 2: Concord Cookie Banner & configured prefix
-				for (var j = 0; j < cookies.length; j++) {
-					var cParts = cookies[j].trim().split('=');
-					var cName = cParts[0].toLowerCase();
-					var cVal = cParts[1] ? decodeURIComponent(cParts[1]) : '';
-					if (cName.indexOf(wfbt_concord_prefix) !== -1) {
-						if (cVal.indexOf('"marketing":true') !== -1 ||
-							cVal.indexOf('marketing:true') !== -1 ||
-							cVal.indexOf('marketing=true') !== -1 ||
-							cVal === 'all' || cVal === 'true' || cVal === 'accepted' || cVal === 'granted') {
-							return { hasConsent: true, source: 'concord' };
+				// Priority 2: Concord Cookie Banner & configured prefix (guarded against empty prefix & internal cookies)
+				if (wfbt_concord_prefix && wfbt_concord_prefix.length > 0) {
+					for (var j = 0; j < cookies.length; j++) {
+						var cRaw = cookies[j].trim();
+						if (!cRaw) continue;
+						var cEq = cRaw.indexOf('=');
+						var cName = (cEq !== -1 ? cRaw.substring(0, cEq) : cRaw).toLowerCase();
+						if (!cName || wfbt_internal_cookies[cName]) {
+							continue;
 						}
-						if (cVal.indexOf('"marketing":false') !== -1 ||
-							cVal.indexOf('marketing:false') !== -1 ||
-							cVal === 'refused' || cVal === 'denied' || cVal === 'false') {
-							return { hasConsent: false, source: 'concord' };
+						if (cName.indexOf(wfbt_concord_prefix) !== -1) {
+							var cVal = (cEq !== -1 ? wfbtSafeDecode(cRaw.substring(cEq + 1)) : '').toLowerCase();
+							if (cVal.indexOf('"marketing":true') !== -1 ||
+								cVal.indexOf('marketing:true') !== -1 ||
+								cVal.indexOf('marketing=true') !== -1 ||
+								cVal === 'all' || cVal === 'true' || cVal === 'accepted' || cVal === 'granted') {
+								return { hasConsent: true, source: 'concord' };
+							}
+							if (cVal.indexOf('"marketing":false') !== -1 ||
+								cVal.indexOf('marketing:false') !== -1 ||
+								cVal.indexOf('marketing=false') !== -1 ||
+								cVal === 'refused' || cVal === 'denied' || cVal === 'false') {
+								return { hasConsent: false, source: 'concord' };
+							}
 						}
 					}
 				}
@@ -1382,6 +1409,21 @@ class Public_Handler {
 	}
 
 	/**
+	 * Resolve normalized Concord / custom cookie prefix with strict empty-string fallback.
+	 * Prevents empty options ("") saved in wp_options from matching 100% of domain cookies
+	 * via JS indexOf("") or PHP 8 stripos($name, "").
+	 *
+	 * @return string Non-empty lowercase cookie prefix.
+	 */
+	public static function get_concord_cookie_prefix() {
+		$raw = trim( (string) get_option( 'wfbt_concord_cookie_name', 'concord' ) );
+		if ( '' === $raw ) {
+			$raw = 'concord';
+		}
+		return strtolower( sanitize_text_field( $raw ) );
+	}
+
+	/**
 	 * Detect marketing consent directly from PHP cookies (Priority: Woo Gads > Concord/Custom).
 	 *
 	 * @return string 'granted', 'denied', or 'unknown'
@@ -1404,21 +1446,37 @@ class Public_Handler {
 			}
 		}
 
-		// Priority 2: Concord Cookie Banner & configured prefix
-		$prefix = strtolower( get_option( 'wfbt_concord_cookie_name', 'concord' ) );
-		foreach ( $_COOKIE as $cookie_name => $cookie_val ) {
-			if ( false !== stripos( $cookie_name, $prefix ) ) {
-				$val = is_string( $cookie_val ) ? strtolower( $cookie_val ) : '';
-				if ( false !== strpos( $val, 'marketing":true' ) ||
-					 false !== strpos( $val, 'marketing:true' ) ||
-					 false !== strpos( $val, 'marketing=true' ) ||
-					 'all' === $val || 'true' === $val || 'accepted' === $val || 'granted' === $val ) {
-					return 'granted';
+		// Priority 2: Concord Cookie Banner & configured prefix (guarded against empty prefix & internal cookies)
+		$prefix           = self::get_concord_cookie_prefix();
+		$internal_cookies = array(
+			'woo_gads_consent',
+			'wfbt_js',
+			'_fbp',
+			'_fbc',
+			'wfbt_fbc',
+			'wfbt_fbclid',
+		);
+
+		if ( '' !== $prefix && ! empty( $_COOKIE ) && is_array( $_COOKIE ) ) {
+			foreach ( $_COOKIE as $cookie_name => $cookie_val ) {
+				$cookie_name_lower = strtolower( (string) $cookie_name );
+				if ( '' === $cookie_name_lower || in_array( $cookie_name_lower, $internal_cookies, true ) ) {
+					continue;
 				}
-				if ( false !== strpos( $val, 'marketing":false' ) ||
-					 false !== strpos( $val, 'marketing:false' ) ||
-					 'refused' === $val || 'denied' === $val || 'false' === $val ) {
-					return 'denied';
+				if ( false !== strpos( $cookie_name_lower, $prefix ) ) {
+					$val = is_string( $cookie_val ) ? strtolower( rawurldecode( wp_unslash( $cookie_val ) ) ) : '';
+					if ( false !== strpos( $val, 'marketing":true' ) ||
+						 false !== strpos( $val, 'marketing:true' ) ||
+						 false !== strpos( $val, 'marketing=true' ) ||
+						 'all' === $val || 'true' === $val || 'accepted' === $val || 'granted' === $val ) {
+						return 'granted';
+					}
+					if ( false !== strpos( $val, 'marketing":false' ) ||
+						 false !== strpos( $val, 'marketing:false' ) ||
+						 false !== strpos( $val, 'marketing=false' ) ||
+						 'refused' === $val || 'denied' === $val || 'false' === $val ) {
+						return 'denied';
+					}
 				}
 			}
 		}
@@ -1452,7 +1510,7 @@ class Public_Handler {
 		}
 
 		$pixel_id     = get_option( 'wfbt_pixel_id', '' );
-		$cookie_name  = get_option( 'wfbt_concord_cookie_name', 'concord' );
+		$cookie_name  = self::get_concord_cookie_prefix();
 		?>
 		<!-- WFBT Front-End Live Debug Bar -->
 		<div id="wfbt-debug-container" style="position: fixed; bottom: 18px; right: 18px; z-index: 9999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px;">
